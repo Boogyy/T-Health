@@ -1,4 +1,4 @@
-package ru.innopolis.tbank.thealth.controller;
+package ru.innopolis.tbank.thealth.controllers;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
