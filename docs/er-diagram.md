@@ -35,10 +35,12 @@
 -   `communities` - сообщества по интересам
     
 -   `community_members` - участники сообществ
-    
--   `chats` - чаты сообществ
-    
--   `messages` - сообщения в чатах
+
+-   `messages` — сообщения внутри сообществ
+
+-   `direct_chats` — личные чаты 1 на 1
+
+-   `direct_messages` — сообщения в личных чатах
     
 
 ## ER-диаграмма
@@ -64,10 +66,15 @@ erDiagram
     achievements ||--o{ user_achievements : assigned
 
     communities ||--o{ community_members : contains
-    communities ||--|| chats : has
     communities |o--o{ posts : contains
 
-    chats ||--o{ messages : contains
+
+    communities ||--o{ messages : contains
+    
+    users ||--o{ direct_chats : starts
+    users ||--o{ direct_chats : receives
+    direct_chats ||--o{ direct_messages : contains
+    users ||--o{ direct_messages : sends
 
     users {
         uuid id PK
@@ -178,13 +185,14 @@ erDiagram
         timestamp joined_at
     }
 
-    chats {
+    direct_chats {
         uuid id PK
-        uuid community_id FK
+        uuid first_user_id FK
+        uuid second_user_id FK
         timestamp created_at
     }
-
-    messages {
+    
+    direct_messages {
         uuid id PK
         uuid chat_id FK
         uuid sender_id FK
@@ -192,6 +200,13 @@ erDiagram
         timestamp sent_at
     }
 
+    messages {
+        uuid id PK
+        uuid community_id FK
+        uuid sender_id FK
+        text content
+        timestamp sent_at
+    }
 ```
 
 ## Логика личных записей и публикаций

@@ -440,14 +440,108 @@ Response `201 Created`:
 }
 ```
 
-## Chats API
 
-Чат создаётся для сообщества. Отправлять и просматривать сообщения могут только участники сообщества.
+## Direct Chats API
+
+Личные чаты предназначены для общения двух пользователей 1 на 1.
+Пользователь может создать личный чат с любым зарегистрированным пользователем, кроме самого себя.
+Если чат между пользователями уже существует, система возвращает существующий чат.
+
+| Метод | Endpoint                        | Описание                                      |
+| ----- | ------------------------------- | --------------------------------------------- |
+| GET   | /direct-chats                   | Получение личных чатов текущего пользователя  |
+| POST  | /direct-chats                   | Создание личного чата с другим пользователем  |
+| GET   | /direct-chats/{chatId}/messages | Получение сообщений личного чата              |
+| POST  | /direct-chats/{chatId}/messages | Отправка сообщения в личный чат               |
+
+### POST /direct-chats
+
+Request:
+
+```json
+{
+  "participantId": "uuid"
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "id": "uuid",
+  "firstParticipant": {
+    "id": "uuid",
+    "username": "ivan"
+  },
+  "secondParticipant": {
+    "id": "uuid",
+    "username": "anna"
+  },
+  "createdAt": "2026-06-08T12:00:00"
+}
+```
+
+### POST /direct-chats/{chatId}/messages
+
+Request:
+
+```json
+{
+  "content": "Привет!"
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "id": "uuid",
+  "chatId": "uuid",
+  "sender": {
+    "id": "uuid",
+    "username": "ivan"
+  },
+  "content": "Привет!",
+  "sentAt": "2026-06-08T12:30:00"
+}
+```
+
+
+
+
+## Community Messages API
+
+Сообщения сообщества доступны только участникам соответствующего сообщества.
 
 | Метод | Endpoint                            | Описание                 |
 | ----- | ----------------------------------- | ------------------------ |
 | GET   | /communities/{communityId}/messages | Получение сообщений чата |
 | POST  | /communities/{communityId}/messages | Отправка сообщения       |
+
+
+### POST /communities/{communityId}/messages
+
+Request:
+
+```json
+{
+  "content": "Кто сегодня идёт на пробежку?"
+}
+```
+
+Response 201 Created:
+```json
+{
+  "id": "uuid",
+  "communityId": "uuid",
+  "sender": {
+    "id": "uuid",
+    "username": "ivan"
+  },
+  "content": "Кто сегодня идёт на пробежку?",
+  "sentAt": "2026-06-08T12:30:00"
+}
+```
 
 ## Коды ответов
 
