@@ -1,8 +1,8 @@
 package ru.innopolis.tbank.thealth.services;
 
 import org.springframework.stereotype.Service;
-import ru.innopolis.tbank.thealth.entities.WorkoutCreateRequest;
-import ru.innopolis.tbank.thealth.entities.WorkoutResponse;
+import ru.innopolis.tbank.thealth.dto.request.WorkoutCreateRequest;
+import ru.innopolis.tbank.thealth.dto.response.WorkoutResponse;
 
 import java.util.List;
 import java.util.Optional;

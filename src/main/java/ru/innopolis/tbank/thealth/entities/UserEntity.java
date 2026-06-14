@@ -35,10 +35,10 @@ public class UserEntity {
     private UserRole role;
 
     @Column(name = "created_at", nullable = false)
-    LocalDateTime createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
-    LocalDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
     public UserEntity() {
 

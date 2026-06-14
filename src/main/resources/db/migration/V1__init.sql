@@ -133,14 +133,6 @@ ON community_members(community_id);
 CREATE INDEX community_members_user_idx
 ON community_members(user_id);
 
-CREATE TABLE IF NOT EXISTS chats (
-    id UUID PRIMARY KEY,
-    community_id UUID NOT NULL REFERENCES communities(id),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT unique_community_chat UNIQUE (community_id)
-);
-
 
 CREATE TABLE IF NOT EXISTS posts (
     id UUID PRIMARY KEY,
@@ -203,14 +195,44 @@ ON comments(author_id);
 
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY,
-    chat_id UUID NOT NULL REFERENCES chats(id),
+    community_id UUID NOT NULL REFERENCES communities(id),
     sender_id UUID NOT NULL REFERENCES users(id),
     content TEXT NOT NULL,
     sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX messages_sorted_idx
-ON messages(chat_id, sent_at DESC);
+ON messages(community_id, sent_at DESC);
 
 CREATE INDEX messages_sender_idx
 ON messages(sender_id);
+
+CREATE TABLE IF NOT EXISTS direct_chats (
+    id UUID PRIMARY KEY,
+    first_user_id UUID NOT NULL REFERENCES users(id),
+    second_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT check_direct_chat_users_different
+    CHECK (first_user_id <> second_user_id)
+);
+
+CREATE UNIQUE INDEX unique_direct_chat_pair_idx
+ON direct_chats (
+    LEAST(first_user_id, second_user_id),
+    GREATEST(first_user_id, second_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS direct_messages (
+    id UUID PRIMARY KEY,
+    chat_id UUID NOT NULL REFERENCES direct_chats(id),
+    sender_id UUID NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX direct_messages_sorted_idx
+    ON direct_messages(chat_id, sent_at DESC);
+
+CREATE INDEX direct_messages_sender_idx
+    ON direct_messages(sender_id);

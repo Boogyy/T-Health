@@ -2,9 +2,8 @@ package ru.innopolis.tbank.thealth.controllers;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.innopolis.tbank.thealth.entities.WorkoutCreateRequest;
-import ru.innopolis.tbank.thealth.entities.WorkoutEntity;
-import ru.innopolis.tbank.thealth.entities.WorkoutResponse;
+import ru.innopolis.tbank.thealth.dto.request.WorkoutCreateRequest;
+import ru.innopolis.tbank.thealth.dto.response.WorkoutResponse;
 import ru.innopolis.tbank.thealth.services.WorkoutService;
 
 import java.util.List;
