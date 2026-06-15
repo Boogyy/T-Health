@@ -34,7 +34,7 @@ public class UserEntity {
     @Column(name = "role", nullable = false, length = 32)
     private UserRole role;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")

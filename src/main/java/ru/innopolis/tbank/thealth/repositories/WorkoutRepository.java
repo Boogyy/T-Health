@@ -3,6 +3,10 @@ package ru.innopolis.tbank.thealth.repositories;
 import org.springframework.data.jpa.repository.JpaRepository;
 import ru.innopolis.tbank.thealth.entities.WorkoutEntity;
 
-public interface WorkoutRepository extends JpaRepository<WorkoutEntity, Long> {
+import java.util.Optional;
+import java.util.UUID;
 
+public interface WorkoutRepository extends JpaRepository<WorkoutEntity, UUID> {
+
+    Optional<WorkoutEntity> findByIdAndUser_Id(UUID workoutId, UUID userId);
 }

@@ -84,7 +84,7 @@ public class AuthService {
 
     }
 
-    private UserResponse toUserResponse(UserEntity user) {
+    public UserResponse toUserResponse(UserEntity user) {
         return new UserResponse(
                 user.getId(),
                 user.getUsername(),

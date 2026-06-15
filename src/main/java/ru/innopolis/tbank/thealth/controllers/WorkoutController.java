@@ -1,13 +1,15 @@
 package ru.innopolis.tbank.thealth.controllers;
 
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutCreateRequest;
 import ru.innopolis.tbank.thealth.dto.response.WorkoutResponse;
 import ru.innopolis.tbank.thealth.services.WorkoutService;
 
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -21,28 +23,25 @@ public class WorkoutController {
     }
 
 
-    @GetMapping()
-    public ResponseEntity<List<WorkoutResponse>> getAllWorkouts() {
-        List<WorkoutResponse> result = workoutService.getAllWorkouts();
-        return ResponseEntity.ok(result);
-    }
-
-    @GetMapping("/id")
-    public ResponseEntity<Optional<WorkoutResponse>> getExactWorkout(@PathVariable("id")UUID id) {
-        Optional<WorkoutResponse> result = workoutService.getWorkotuById(id);
-        return ResponseEntity.ok(result);
-    }
-
-    @PostMapping("/add")
-    public ResponseEntity<WorkoutResponse> createNewWorkout(@RequestBody WorkoutCreateRequest workoutToCreate) {
-        var result = workoutService.createWorkout(workoutToCreate);
+    @PostMapping()
+    public ResponseEntity<WorkoutResponse> createNewWorkout(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody WorkoutCreateRequest workoutToCreate
+    ) {
+        UUID userId = UUID.fromString(jwt.getClaimAsString("userId"));
+        var result = workoutService.createWorkout(workoutToCreate, userId);
         return ResponseEntity.status(201).body(result);
     }
 
-    @PutMapping("/change/id")
-    private ResponseEntity<Optional<WorkoutResponse>> changeTrainingMethod(@PathVariable("id") Long id){
-        Optional<WorkoutResponse> result = workoutService.changeById(id);
-        return ResponseEntity.ok(result);
-
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteWorkout(
+            @PathVariable("id") UUID workoutId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID userId = UUID.fromString(jwt.getClaimAsString("userId"));
+        workoutService.deleteWorkout(workoutId, userId);
+        return ResponseEntity.noContent().build();
     }
+
+
 }
