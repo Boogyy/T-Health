@@ -1,5 +1,6 @@
 package ru.innopolis.tbank.thealth.services;
 
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
@@ -20,17 +21,20 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse getCurrentUser(UUID userId) {
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found by id " + userId));
+    public UserResponse getCurrentUser(Jwt jwt) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseGet(() -> createUserFromJwt(jwt, keycloakId));
 
         return toResponse(user);
     }
 
     @Transactional
-    public UserResponse updateCurrentUser(UUID userId, UpdateUserRequest request) {
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found by id " + userId));
+    public UserResponse updateCurrentUser(Jwt jwt, UpdateUserRequest request) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found by id " + keycloakId));
 
         if (request.username() != null && !request.username().isBlank()) {
             if (!request.username().equals(user.getUsername())
@@ -55,12 +59,33 @@ public class UserService {
 
     private UserResponse toResponse(UserEntity user) {
         return new UserResponse(
-                user.getId(),
+                user.getKeycloakId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getFirstName(),
-                user.getLastName(),
-                user.getRole()
+                user.getLastName()
         );
+    }
+
+    private UserEntity createUserFromJwt(Jwt jwt, UUID keycloakId) {
+        String email = jwt.getClaimAsString("email");
+        String username = jwt.getClaimAsString("preferred_username");
+
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email claim is missing in token");
+        }
+
+        if (username == null || username.isBlank()) {
+            username = "user_" + keycloakId;
+        }
+
+        UserEntity newUser = new UserEntity();
+        newUser.setKeycloakId(keycloakId);
+        newUser.setEmail(email);
+        newUser.setUsername(username);
+        newUser.setFirstName(jwt.getClaimAsString("given_name"));
+        newUser.setLastName(jwt.getClaimAsString("family_name"));
+
+        return userRepository.save(newUser);
     }
 }

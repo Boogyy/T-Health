@@ -52,7 +52,7 @@ public class WorkoutService {
 
     @Transactional
     public void deleteWorkout( UUID workoutId, UUID userId) {
-        WorkoutEntity workout = workoutRepository.findByIdAndUser_Id(workoutId, userId).orElseThrow(
+        WorkoutEntity workout = workoutRepository.findByIdAndUser_KeycloakId(workoutId, userId).orElseThrow(
                 () -> new IllegalArgumentException("Workout not found")
         );
 
@@ -62,7 +62,7 @@ public class WorkoutService {
     private WorkoutResponse toResponse(WorkoutEntity workoutEntity) {
         return new WorkoutResponse(
                 workoutEntity.getId(),
-                workoutEntity.getUser().getId(),
+                workoutEntity.getUser().getKeycloakId(),
                 workoutEntity.getTitle(),
                 workoutEntity.getType(),
                 workoutEntity.getDescription(),
@@ -70,7 +70,5 @@ public class WorkoutService {
                 workoutEntity.getCaloriesBurned()
         );
     }
-
-
 
 }

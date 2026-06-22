@@ -8,5 +8,5 @@ import java.util.UUID;
 
 public interface WorkoutRepository extends JpaRepository<WorkoutEntity, UUID> {
 
-    Optional<WorkoutEntity> findByIdAndUser_Id(UUID workoutId, UUID userId);
+    Optional<WorkoutEntity> findByIdAndUser_KeycloakId(UUID workoutId, UUID userId);
 }

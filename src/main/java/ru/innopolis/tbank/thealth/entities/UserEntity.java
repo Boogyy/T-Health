@@ -11,9 +11,8 @@ import java.util.UUID;
 public class UserEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id")
-    private UUID id;
+    @Column(name = "keycloak_id")
+    private UUID keycloakId;
 
     @Column(name = "username", nullable = false, length = 32)
     private String username;
@@ -21,18 +20,11 @@ public class UserEntity {
     @Column(name = "email", nullable = false, length = 64)
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 256)
-    private String passwordHash;
-
     @Column(name = "first_name", length = 64)
     private String firstName;
 
     @Column(name = "last_name", length = 64)
     private String lastName;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false, length = 32)
-    private UserRole role;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -44,22 +36,18 @@ public class UserEntity {
 
     }
 
-    public UserEntity(UUID id,
+    public UserEntity(UUID keycloakId,
                       String username,
                       String email,
-                      String passwordHash,
                       String firstName,
                       String lastName,
-                      UserRole role,
                       LocalDateTime createdAt,
                       LocalDateTime updatedAt) {
-        this.id = id;
+        this.keycloakId = keycloakId;
         this.username = username;
         this.email = email;
-        this.passwordHash = passwordHash;
         this.firstName = firstName;
         this.lastName = lastName;
-        this.role = role;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -67,10 +55,6 @@ public class UserEntity {
     @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();
-
-        if (role == null) {
-            role = UserRole.USER;
-        }
 
         if (createdAt == null) {
             createdAt = now;
@@ -87,12 +71,12 @@ public class UserEntity {
     }
 
 
-    public UUID getId() {
-        return id;
+    public UUID getKeycloakId() {
+        return keycloakId;
     }
 
-    public void setId(UUID id) {
-        this.id = id;
+    public void setKeycloakId(UUID keycloakId) {
+        this.keycloakId = keycloakId;
     }
 
     public String getUsername() {
@@ -111,14 +95,6 @@ public class UserEntity {
         this.email = email;
     }
 
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
     public String getFirstName() {
         return firstName;
     }
@@ -133,14 +109,6 @@ public class UserEntity {
 
     public void setLastName(String lastName) {
         this.lastName = lastName;
-    }
-
-    public UserRole getRole() {
-        return role;
-    }
-
-    public void setRole(UserRole role) {
-        this.role = role;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -28,7 +28,7 @@ public class WorkoutController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody WorkoutCreateRequest workoutToCreate
     ) {
-        UUID userId = UUID.fromString(jwt.getClaimAsString("userId"));
+        UUID userId = getUserId(jwt);
         var result = workoutService.createWorkout(workoutToCreate, userId);
         return ResponseEntity.status(201).body(result);
     }
@@ -38,9 +38,13 @@ public class WorkoutController {
             @PathVariable("id") UUID workoutId,
             @AuthenticationPrincipal Jwt jwt
     ) {
-        UUID userId = UUID.fromString(jwt.getClaimAsString("userId"));
+        UUID userId = getUserId(jwt);
         workoutService.deleteWorkout(workoutId, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    private UUID getUserId(Jwt jwt) {
+        return UUID.fromString(jwt.getSubject());
     }
 
 

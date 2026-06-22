@@ -26,8 +26,7 @@ public class UserController {
     public ResponseEntity<UserResponse> getCurrentUser(
             @AuthenticationPrincipal Jwt jwt
     ) {
-        UUID userId = getUserId(jwt);
-        var result = userService.getCurrentUser(userId);
+        var result = userService.getCurrentUser(jwt);
         return ResponseEntity.ok(result);
     }
 
@@ -40,15 +39,11 @@ public class UserController {
             @Valid @RequestBody UpdateUserRequest request
             ) {
 
-        UUID userId = getUserId(jwt);
-
-        var result = userService.updateCurrentUser(userId, request);
+        var result = userService.updateCurrentUser(jwt, request);
         return ResponseEntity.ok(result);
     }
 
-    private UUID getUserId(Jwt jwt) {
-        return UUID.fromString(jwt.getClaimAsString("userId"));
-    }
+
 
 
 

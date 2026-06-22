@@ -1,17 +1,15 @@
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY,
+    keycloak_id UUID PRIMARY KEY,
     username VARCHAR(32) NOT NULL,
     email VARCHAR(64) NOT NULL,
-    password_hash VARCHAR(256) NOT NULL,
     first_name VARCHAR(64),
     last_name VARCHAR(64),
-    role VARCHAR(32) NOT NULL DEFAULT 'USER',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT unique_user_email UNIQUE (email),
-    CONSTRAINT unique_username UNIQUE (username),
-    CONSTRAINT check_user_role CHECK (role IN ('USER', 'ADMIN'))
+    CONSTRAINT unique_username UNIQUE (username)
+
 );
 
 CREATE TABLE IF NOT EXISTS achievements (
@@ -26,7 +24,7 @@ CREATE TABLE IF NOT EXISTS achievements (
 
 CREATE TABLE IF NOT EXISTS communities (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES users(id),
+    owner_id UUID NOT NULL REFERENCES users(keycloak_id),
     community_name VARCHAR(64) NOT NULL,
     description TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -38,7 +36,7 @@ ON communities(owner_id);
 
 CREATE TABLE IF NOT EXISTS workouts (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(keycloak_id),
     title VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
     description TEXT,
@@ -57,7 +55,7 @@ ON workouts(user_id);
 
 CREATE TABLE IF NOT EXISTS food_entries (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(keycloak_id),
     meal_name VARCHAR(128) NOT NULL,
     calories INTEGER NOT NULL,
     proteins DECIMAL(6,2) NOT NULL,
@@ -78,7 +76,7 @@ ON food_entries(user_id);
 
 CREATE TABLE IF NOT EXISTS recipes (
     id UUID PRIMARY KEY,
-    author_id UUID NOT NULL REFERENCES users(id),
+    author_id UUID NOT NULL REFERENCES users(keycloak_id),
     title VARCHAR(128) NOT NULL,
     description TEXT NOT NULL,
     ingredients TEXT NOT NULL,
@@ -102,7 +100,7 @@ ON recipes(author_id);
 
 CREATE TABLE IF NOT EXISTS user_achievements (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(keycloak_id),
     achievement_id UUID NOT NULL REFERENCES achievements(id),
     received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -118,7 +116,7 @@ ON user_achievements(achievement_id);
 CREATE TABLE IF NOT EXISTS community_members (
     id UUID PRIMARY KEY,
     community_id UUID NOT NULL REFERENCES communities(id),
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(keycloak_id),
     role VARCHAR(32) NOT NULL DEFAULT 'MEMBER',
     joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -136,7 +134,7 @@ ON community_members(user_id);
 
 CREATE TABLE IF NOT EXISTS posts (
     id UUID PRIMARY KEY,
-    author_id UUID NOT NULL REFERENCES users(id),
+    author_id UUID NOT NULL REFERENCES users(keycloak_id),
     community_id UUID REFERENCES communities(id),
     visibility VARCHAR(32) NOT NULL,
     workout_id UUID REFERENCES workouts(id),
@@ -181,7 +179,7 @@ ON posts(community_id);
 CREATE TABLE IF NOT EXISTS comments (
     id UUID PRIMARY KEY,
     post_id UUID NOT NULL REFERENCES posts(id),
-    author_id UUID NOT NULL REFERENCES users(id),
+    author_id UUID NOT NULL REFERENCES users(keycloak_id),
     content TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -196,7 +194,7 @@ ON comments(author_id);
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY,
     community_id UUID NOT NULL REFERENCES communities(id),
-    sender_id UUID NOT NULL REFERENCES users(id),
+    sender_id UUID NOT NULL REFERENCES users(keycloak_id),
     content TEXT NOT NULL,
     sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -209,8 +207,8 @@ ON messages(sender_id);
 
 CREATE TABLE IF NOT EXISTS direct_chats (
     id UUID PRIMARY KEY,
-    first_user_id UUID NOT NULL REFERENCES users(id),
-    second_user_id UUID NOT NULL REFERENCES users(id),
+    first_user_id UUID NOT NULL REFERENCES users(keycloak_id),
+    second_user_id UUID NOT NULL REFERENCES users(keycloak_id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT check_direct_chat_users_different
@@ -226,7 +224,7 @@ ON direct_chats (
 CREATE TABLE IF NOT EXISTS direct_messages (
     id UUID PRIMARY KEY,
     chat_id UUID NOT NULL REFERENCES direct_chats(id),
-    sender_id UUID NOT NULL REFERENCES users(id),
+    sender_id UUID NOT NULL REFERENCES users(keycloak_id),
     content TEXT NOT NULL,
     sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
