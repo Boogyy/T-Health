@@ -12,4 +12,6 @@ public interface FoodEntryRepository extends JpaRepository<FoodEntryEntity, UUID
     List<FoodEntryEntity> findAllByUser_KeycloakIdOrderByMealDateDesc(UUID userId);
 
     Optional<FoodEntryEntity> findByIdAndUser_KeycloakId(UUID foodEntryId, UUID userId);
+
+    long countByUser_KeycloakId(UUID userId);
 }

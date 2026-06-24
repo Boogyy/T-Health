@@ -18,11 +18,14 @@ public class FoodEntryService {
 
     private final FoodEntryRepository foodEntryRepository;
     private final UserRepository userRepository;
+    private final AchievementService achievementService;
 
     public FoodEntryService(FoodEntryRepository foodEntryRepository,
-                            UserRepository userRepository) {
+                            UserRepository userRepository,
+                            AchievementService achievementService) {
         this.foodEntryRepository = foodEntryRepository;
         this.userRepository = userRepository;
+        this.achievementService = achievementService;
     }
 
     @Transactional(readOnly = true)
@@ -36,6 +39,7 @@ public class FoodEntryService {
     @Transactional(readOnly = true)
     public FoodEntryResponse getFoodEntry(UUID foodEntryId, UUID userId) {
         FoodEntryEntity foodEntry = findOwnedFoodEntry(foodEntryId, userId);
+        grantFoodEntryAchievements(userId);
         return toResponse(foodEntry);
     }
 
@@ -102,6 +106,18 @@ public class FoodEntryService {
     private FoodEntryEntity findOwnedFoodEntry(UUID foodEntryId, UUID userId) {
         return foodEntryRepository.findByIdAndUser_KeycloakId(foodEntryId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Food entry not found"));
+    }
+
+    private void grantFoodEntryAchievements(UUID userId) {
+        long foodEntriesCount = foodEntryRepository.countByUser_KeycloakId(userId);
+
+        if (foodEntriesCount >= 1) {
+            achievementService.grantAchievementIfNotExists(userId, "FIRST_FOOD_ENTRY");
+        }
+
+        if (foodEntriesCount >= 10) {
+            achievementService.grantAchievementIfNotExists(userId, "TEN_FOOD_ENTRIES");
+        }
     }
 
     private FoodEntryResponse toResponse(FoodEntryEntity foodEntry) {

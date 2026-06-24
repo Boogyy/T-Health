@@ -14,10 +14,13 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final AchievementService achievementService;
 
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository,
+                    AchievementService achievementService) {
         this.userRepository = userRepository;
+        this.achievementService = achievementService;
     }
 
     @Transactional
@@ -86,6 +89,12 @@ public class UserService {
         newUser.setFirstName(jwt.getClaimAsString("given_name"));
         newUser.setLastName(jwt.getClaimAsString("family_name"));
 
-        return userRepository.save(newUser);
+        UserEntity savedUser = userRepository.save(newUser);
+        achievementService.grantAchievementIfNotExists(
+                savedUser.getKeycloakId(),
+                "WELCOME_TO_T_HEALTH"
+        );
+
+        return savedUser;
     }
 }

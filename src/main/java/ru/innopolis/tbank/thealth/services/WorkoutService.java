@@ -20,11 +20,14 @@ public class WorkoutService {
 
     private final UserRepository userRepository;
     private final WorkoutRepository workoutRepository;
+    private final AchievementService achievementService;
 
     public WorkoutService(UserRepository userRepository,
-                          WorkoutRepository workoutRepository) {
+                        WorkoutRepository workoutRepository,
+                        AchievementService achievementService) {
         this.userRepository = userRepository;
         this.workoutRepository = workoutRepository;
+        this.achievementService = achievementService;
     }
 
     @Transactional
@@ -47,6 +50,8 @@ public class WorkoutService {
 
         WorkoutEntity savedEntity = workoutRepository.save(workoutToSave);
 
+        grantWorkoutAchievements(userId, savedEntity);
+
         return toResponse(savedEntity);
     }
 
@@ -57,6 +62,26 @@ public class WorkoutService {
         );
 
         workoutRepository.delete(workout);
+    }
+
+    private void grantWorkoutAchievements(UUID userId, WorkoutEntity workout) {
+        long workoutsCount = workoutRepository.countByUser_KeycloakId(userId);
+
+        if (workoutsCount >= 1) {
+            achievementService.grantAchievementIfNotExists(userId, "FIRST_WORKOUT");
+        }
+
+        if (workoutsCount >= 5) {
+            achievementService.grantAchievementIfNotExists(userId, "FIVE_WORKOUTS");
+        }
+
+        if (workout.getDurationMinutes() != null && workout.getDurationMinutes() >= 60) {
+            achievementService.grantAchievementIfNotExists(userId, "LONG_WORKOUT");
+        }
+
+        if (workout.getCaloriesBurned() != null && workout.getCaloriesBurned() >= 500) {
+            achievementService.grantAchievementIfNotExists(userId, "CALORIE_BURNER");
+        }
     }
 
     private WorkoutResponse toResponse(WorkoutEntity workoutEntity) {

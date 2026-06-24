@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface WorkoutRepository extends JpaRepository<WorkoutEntity, UUID> {
 
     Optional<WorkoutEntity> findByIdAndUser_KeycloakId(UUID workoutId, UUID userId);
+
+    long countByUser_KeycloakId(UUID userId);
 }
