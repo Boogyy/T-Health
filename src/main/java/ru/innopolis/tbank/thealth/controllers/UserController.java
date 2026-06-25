@@ -1,6 +1,7 @@
 package ru.innopolis.tbank.thealth.controllers;
 
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,7 +34,7 @@ public class UserController {
 
 
 
-    @PatchMapping("/update/me")
+    @PatchMapping("/me")
     public ResponseEntity<UserResponse> updateCurrentUser(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdateUserRequest request
@@ -41,6 +42,14 @@ public class UserController {
 
         var result = userService.updateCurrentUser(jwt, request);
         return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteCurrentUser(
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        userService.deleteUser(jwt);
+        return ResponseEntity.noContent().build();
     }
 
 

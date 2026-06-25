@@ -8,6 +8,7 @@ import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @Service
@@ -15,12 +16,16 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AchievementService achievementService;
-
-
-    public UserService(UserRepository userRepository,
-                    AchievementService achievementService) {
+    private final KeycloakAdminClient keycloakAdminClient;
+     
+    public UserService (
+            UserRepository userRepository,
+            AchievementService achievementService,
+            KeycloakAdminClient keycloakAdminClient
+    ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
+        this.keycloakAdminClient = keycloakAdminClient;
     }
 
     @Transactional
@@ -97,4 +102,18 @@ public class UserService {
 
         return savedUser;
     }
+
+
+    @Transactional
+    public void deleteUser(Jwt jwt) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        keycloakAdminClient.deleteUser(keycloakId);
+
+        userRepository.delete(user);
+    }
+
 }
