@@ -6,7 +6,13 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
+import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
+import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
+import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
+import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
+import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
+import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
 
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -17,15 +23,26 @@ public class UserService {
     private final UserRepository userRepository;
     private final AchievementService achievementService;
     private final KeycloakAdminClient keycloakAdminClient;
-     
+    private final WorkoutRepository workoutRepository;
+    private final FoodEntryRepository foodEntryRepository;
+    private final UserAchievementRepository userAchievementRepository;
+
+
+
     public UserService (
             UserRepository userRepository,
             AchievementService achievementService,
-            KeycloakAdminClient keycloakAdminClient
+            KeycloakAdminClient keycloakAdminClient,
+            WorkoutRepository workoutRepository,
+            FoodEntryRepository foodEntryRepository,
+            UserAchievementRepository userAchievementRepository
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
         this.keycloakAdminClient = keycloakAdminClient;
+        this.workoutRepository = workoutRepository;
+        this.foodEntryRepository = foodEntryRepository;
+        this.userAchievementRepository = userAchievementRepository;
     }
 
     @Transactional
@@ -42,12 +59,12 @@ public class UserService {
         UUID keycloakId = UUID.fromString(jwt.getSubject());
 
         UserEntity user = userRepository.findById(keycloakId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found by id " + keycloakId));
+                .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
         if (request.username() != null && !request.username().isBlank()) {
             if (!request.username().equals(user.getUsername())
                     && userRepository.existsByUsername(request.username())) {
-                throw new IllegalArgumentException("Username already exists");
+                throw new DuplicateUsernameException(request.username());
             }
 
             user.setUsername(request.username());
@@ -80,7 +97,7 @@ public class UserService {
         String username = jwt.getClaimAsString("preferred_username");
 
         if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("Email claim is missing in token");
+            throw new MissingTokenClaimException(email);
         }
 
         if (username == null || username.isBlank()) {
@@ -109,11 +126,15 @@ public class UserService {
         UUID keycloakId = UUID.fromString(jwt.getSubject());
 
         UserEntity user = userRepository.findById(keycloakId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
-        keycloakAdminClient.deleteUser(keycloakId);
+        workoutRepository.deleteAllByUser_KeycloakId(keycloakId);
+        foodEntryRepository.deleteAllByUser_KeycloakId(keycloakId);
+        userAchievementRepository.deleteAllByUser_KeycloakId(keycloakId);
 
         userRepository.delete(user);
+
+        keycloakAdminClient.deleteUser(keycloakId);
     }
 
 }

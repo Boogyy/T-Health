@@ -7,6 +7,8 @@ import ru.innopolis.tbank.thealth.dto.request.FoodEntryUpdateRequest;
 import ru.innopolis.tbank.thealth.dto.response.FoodEntryResponse;
 import ru.innopolis.tbank.thealth.entities.FoodEntryEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
+import ru.innopolis.tbank.thealth.exceptions.FoodEntryNotFoundException;
+import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
 import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 
@@ -46,7 +48,7 @@ public class FoodEntryService {
     @Transactional
     public FoodEntryResponse createFoodEntry(FoodEntryCreateRequest request, UUID userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(userId));
 
         FoodEntryEntity foodEntry = new FoodEntryEntity();
         foodEntry.setUser(user);
@@ -105,7 +107,7 @@ public class FoodEntryService {
 
     private FoodEntryEntity findOwnedFoodEntry(UUID foodEntryId, UUID userId) {
         return foodEntryRepository.findByIdAndUser_KeycloakId(foodEntryId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Food entry not found"));
+                .orElseThrow(() -> new FoodEntryNotFoundException(foodEntryId));
     }
 
     private void grantFoodEntryAchievements(UUID userId) {

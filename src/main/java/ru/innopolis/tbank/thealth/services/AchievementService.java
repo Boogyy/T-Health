@@ -7,6 +7,8 @@ import ru.innopolis.tbank.thealth.dto.response.UserAchievementResponse;
 import ru.innopolis.tbank.thealth.entities.AchievementEntity;
 import ru.innopolis.tbank.thealth.entities.UserAchievementEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
+import ru.innopolis.tbank.thealth.exceptions.AchievementNotFoundException;
+import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
 import ru.innopolis.tbank.thealth.repositories.AchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
@@ -71,10 +73,10 @@ public class AchievementService {
 
     private void grantAchievement(UUID userId, String achievementCode) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(userId));
 
         AchievementEntity achievement = achievementRepository.findByCode(achievementCode)
-                .orElseThrow(() -> new IllegalArgumentException("Achievement not found"));
+                .orElseThrow(() -> new AchievementNotFoundException(achievementCode));
 
         UserAchievementEntity userAchievement = new UserAchievementEntity();
         userAchievement.setUser(user);
