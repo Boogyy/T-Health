@@ -41,7 +41,6 @@ public class FoodEntryService {
     @Transactional(readOnly = true)
     public FoodEntryResponse getFoodEntry(UUID foodEntryId, UUID userId) {
         FoodEntryEntity foodEntry = findOwnedFoodEntry(foodEntryId, userId);
-        grantFoodEntryAchievements(userId);
         return toResponse(foodEntry);
     }
 
@@ -60,6 +59,8 @@ public class FoodEntryService {
         foodEntry.setMealDate(request.mealDate());
 
         FoodEntryEntity savedFoodEntry = foodEntryRepository.save(foodEntry);
+
+        grantFoodEntryAchievements(userId);
 
         return toResponse(savedFoodEntry);
     }
