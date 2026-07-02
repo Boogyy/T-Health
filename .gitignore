@@ -34,4 +34,9 @@ build/
 .idea/
 .env
 .env.*
-!.env.example
+!.env.example.DS_Store
+
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.DS_Store

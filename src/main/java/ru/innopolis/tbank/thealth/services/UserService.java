@@ -1,0 +1,140 @@
+package ru.innopolis.tbank.thealth.services;
+
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
+import ru.innopolis.tbank.thealth.entities.UserEntity;
+import ru.innopolis.tbank.thealth.dto.response.UserResponse;
+import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
+import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
+import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
+import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
+import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
+import ru.innopolis.tbank.thealth.repositories.UserRepository;
+import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
+
+import java.util.NoSuchElementException;
+import java.util.UUID;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final AchievementService achievementService;
+    private final KeycloakAdminClient keycloakAdminClient;
+    private final WorkoutRepository workoutRepository;
+    private final FoodEntryRepository foodEntryRepository;
+    private final UserAchievementRepository userAchievementRepository;
+
+
+
+    public UserService (
+            UserRepository userRepository,
+            AchievementService achievementService,
+            KeycloakAdminClient keycloakAdminClient,
+            WorkoutRepository workoutRepository,
+            FoodEntryRepository foodEntryRepository,
+            UserAchievementRepository userAchievementRepository
+    ) {
+        this.userRepository = userRepository;
+        this.achievementService = achievementService;
+        this.keycloakAdminClient = keycloakAdminClient;
+        this.workoutRepository = workoutRepository;
+        this.foodEntryRepository = foodEntryRepository;
+        this.userAchievementRepository = userAchievementRepository;
+    }
+
+    @Transactional
+    public UserResponse getCurrentUser(Jwt jwt) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseGet(() -> createUserFromJwt(jwt, keycloakId));
+
+        return toResponse(user);
+    }
+
+    @Transactional
+    public UserResponse updateCurrentUser(Jwt jwt, UpdateUserRequest request) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseThrow(() -> new UserNotFoundException(keycloakId));
+
+        if (request.username() != null && !request.username().isBlank()) {
+            if (!request.username().equals(user.getUsername())
+                    && userRepository.existsByUsername(request.username())) {
+                throw new DuplicateUsernameException(request.username());
+            }
+
+            user.setUsername(request.username());
+        }
+
+        if (request.firstName() != null) {
+            user.setFirstName(request.firstName());
+        }
+
+        if (request.lastName() != null) {
+            user.setLastName(request.lastName());
+        }
+
+        return toResponse(user);
+    }
+
+
+    private UserResponse toResponse(UserEntity user) {
+        return new UserResponse(
+                user.getKeycloakId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFirstName(),
+                user.getLastName()
+        );
+    }
+
+    private UserEntity createUserFromJwt(Jwt jwt, UUID keycloakId) {
+        String email = jwt.getClaimAsString("email");
+        String username = jwt.getClaimAsString("preferred_username");
+
+        if (email == null || email.isBlank()) {
+            throw new MissingTokenClaimException(email);
+        }
+
+        if (username == null || username.isBlank()) {
+            username = "user_" + keycloakId;
+        }
+
+        UserEntity newUser = new UserEntity();
+        newUser.setKeycloakId(keycloakId);
+        newUser.setEmail(email);
+        newUser.setUsername(username);
+        newUser.setFirstName(jwt.getClaimAsString("given_name"));
+        newUser.setLastName(jwt.getClaimAsString("family_name"));
+
+        UserEntity savedUser = userRepository.save(newUser);
+        achievementService.grantAchievementIfNotExists(
+                savedUser.getKeycloakId(),
+                "WELCOME_TO_T_HEALTH"
+        );
+
+        return savedUser;
+    }
+
+
+    @Transactional
+    public void deleteUser(Jwt jwt) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+
+        UserEntity user = userRepository.findById(keycloakId)
+                .orElseThrow(() -> new UserNotFoundException(keycloakId));
+
+        workoutRepository.deleteAllByUser_KeycloakId(keycloakId);
+        foodEntryRepository.deleteAllByUser_KeycloakId(keycloakId);
+        userAchievementRepository.deleteAllByUser_KeycloakId(keycloakId);
+
+        userRepository.delete(user);
+
+        keycloakAdminClient.deleteUser(keycloakId);
+    }
+
+}
