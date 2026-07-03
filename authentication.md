@@ -145,28 +145,3 @@ keycloak:
 docker compose down -v
 docker compose up -d
 ```
-
-### Frontend flow
-
-Для пользовательского интерфейса используется public client:
-
-```text
-t-health-frontend
-```
-
-Поддерживаемые локальные redirect URI уже добавлены в realm:
-
-```text
-http://localhost:8080/*
-http://localhost:5173/*
-http://localhost:8089/*
-```
-
-Фронтенд открывает страницу Keycloak для входа или регистрации, получает authorization code на свой redirect URI, обменивает code на токены по PKCE, а затем вызывает:
-
-```http
-GET /api/users/me
-Authorization: Bearer <access_token>
-```
-
-Этот вызов создает локального пользователя в PostgreSQL, если такого `sub` из Keycloak еще нет.

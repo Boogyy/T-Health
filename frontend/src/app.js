@@ -1,17 +1,23 @@
+import './styles.css';
+
 (() => {
   'use strict';
 
+  const viteEnv = typeof import.meta !== 'undefined' ? import.meta.env : {};
+
   const CONFIG = {
-    keycloakBaseUrl: window.T_HEALTH_CONFIG?.keycloakBaseUrl || localStorage.getItem('tHealthKeycloakUrl') || 'http://localhost:8180',
-    realm: window.T_HEALTH_CONFIG?.realm || localStorage.getItem('tHealthRealm') || 't-health',
-    clientId: window.T_HEALTH_CONFIG?.clientId || localStorage.getItem('tHealthClientId') || 't-health-frontend',
-    apiBaseUrl: window.T_HEALTH_CONFIG?.apiBaseUrl || localStorage.getItem('tHealthApiBase') || defaultApiBaseUrl(),
+    keycloakBaseUrl: window.T_HEALTH_CONFIG?.keycloakBaseUrl || localStorage.getItem('tHealthKeycloakUrl') || viteEnv.VITE_KEYCLOAK_BASE_URL || 'http://localhost:8180',
+    realm: window.T_HEALTH_CONFIG?.realm || localStorage.getItem('tHealthRealm') || viteEnv.VITE_KEYCLOAK_REALM || 't-health',
+    clientId: window.T_HEALTH_CONFIG?.clientId || localStorage.getItem('tHealthClientId') || viteEnv.VITE_KEYCLOAK_CLIENT_ID || 't-health-frontend',
+    apiBaseUrl: normalizeBaseUrl(window.T_HEALTH_CONFIG?.apiBaseUrl || localStorage.getItem('tHealthApiBase') || viteEnv.VITE_API_BASE_URL || defaultApiBaseUrl()),
   };
 
   const STORAGE = {
     token: 'tHealthTokens',
     pkce: 'tHealthPkce',
     returnTo: 'tHealthReturnTo',
+    authMode: 'tHealthAuthMode',
+    seenAchievements: 'tHealthSeenAchievementIds',
   };
 
   const state = {
@@ -23,6 +29,11 @@
     pageLoading: false,
     error: null,
     flash: null,
+    achievementModal: null,
+    achievementQueue: [],
+    achievementQueueTotal: 0,
+    achievementQueueIndex: 0,
+    achievementShareNotice: null,
   };
 
   const app = document.getElementById('app');
@@ -49,11 +60,13 @@
   }
 
   function defaultApiBaseUrl() {
-    const { protocol, hostname, port, origin } = window.location;
-    if (port === '5173' || port === '3000') {
-      return `${protocol}//${hostname}:8089`;
-    }
-    return origin;
+    // В dev-режиме Vite обращаемся к текущему origin, а /api проксируется на backend из vite.config.js.
+    // В production это также работает, если nginx/сервер проксирует /api на backend.
+    return window.location.origin;
+  }
+
+  function normalizeBaseUrl(value) {
+    return String(value || '').replace(/\/$/, '');
   }
 
   function currentRedirectUri() {
@@ -82,6 +95,7 @@
 
       localStorage.setItem(STORAGE.pkce, JSON.stringify({ verifier, state: stateValue, createdAt: Date.now() }));
       localStorage.setItem(STORAGE.returnTo, returnTo);
+      localStorage.setItem(STORAGE.authMode, mode);
 
       const params = new URLSearchParams({
         client_id: CONFIG.clientId,
@@ -138,7 +152,17 @@
       history.replaceState(null, document.title, window.location.pathname);
 
       await getCurrentUser(true);
-      const returnTo = localStorage.getItem(STORAGE.returnTo) || '/profile';
+      const authMode = localStorage.getItem(STORAGE.authMode);
+      localStorage.removeItem(STORAGE.authMode);
+
+      if (authMode === 'register') {
+        await loadDashboard(true, {
+          animateNewAchievements: true,
+          previousAchievementIds: new Set(),
+        });
+      }
+
+      const returnTo = authMode === 'register' ? '/profile' : localStorage.getItem(STORAGE.returnTo) || '/profile';
       localStorage.removeItem(STORAGE.returnTo);
       navigate(returnTo);
     } catch (error) {
@@ -272,7 +296,7 @@
     return state.user;
   }
 
-  async function loadDashboard(force = false) {
+  async function loadDashboard(force = false, options = {}) {
     if (state.loading) {
       return;
     }
@@ -288,14 +312,21 @@
 
     try {
       state.user = await apiFetch('/api/users/me');
+      const previousAchievementIds = options.previousAchievementIds || achievementIdSet(state.achievements || []);
       const [workouts, foodEntries, achievements] = await Promise.all([
         apiFetch('/api/workouts'),
         apiFetch('/api/food-entries'),
-        apiFetch('/api/users/me/achievements').catch(() => []),
+        fetchAchievements(),
       ]);
       state.workouts = Array.isArray(workouts) ? workouts : [];
       state.foodEntries = Array.isArray(foodEntries) ? foodEntries : [];
-      state.achievements = Array.isArray(achievements) ? achievements : [];
+      state.achievements = normalizeAchievements(Array.isArray(achievements) ? achievements : []);
+
+      if (options.animateNewAchievements) {
+        const newAchievements = findNewAchievements(state.achievements, previousAchievementIds);
+        showAchievementQueue(newAchievements);
+      }
+      markAchievementsSeen(state.achievements);
     } catch (error) {
       if (error instanceof AuthRequiredError) {
         navigate('/login');
@@ -311,6 +342,7 @@
   function clearAuthData() {
     localStorage.removeItem(STORAGE.token);
     localStorage.removeItem(STORAGE.pkce);
+    localStorage.removeItem(STORAGE.authMode);
     state.user = null;
     state.workouts = null;
     state.foodEntries = null;
@@ -363,7 +395,15 @@
     const parts = routeParts();
     if (parts[0] === 'profile') {
       renderProtected(renderProfile());
-      if (!state.user || !state.workouts || !state.foodEntries) {
+      if (!state.user || !state.workouts || !state.foodEntries || !state.achievements) {
+        loadDashboard();
+      }
+      return;
+    }
+
+    if (parts[0] === 'achievements') {
+      renderProtected(renderAchievementsRoute(parts));
+      if (!state.achievements) {
         loadDashboard();
       }
       return;
@@ -465,6 +505,7 @@
             ${navLink('/profile', 'Профиль', route)}
             ${navLink('/workouts', 'Тренировки', route)}
             ${navLink('/food', 'Питание', route)}
+            ${navLink('/achievements', 'Достижения', route)}
             ${navLink('/feed', 'Лента постов', route)}
             <button class="nav-link" type="button" data-reload>Обновить</button>
             <button class="nav-link" type="button" data-logout>Выйти</button>
@@ -472,6 +513,7 @@
         </div>
       </header>
       <main class="page">${content}</main>
+      ${achievementModalHtml()}
     `;
     bindGlobalActions();
     bindForms();
@@ -541,6 +583,15 @@
             <div class="metric">${foodEntries.length}<small> шт.</small></div>
             <p>${mealCalories} ккал суммарно</p>
           </a>
+          <a class="card achievement-card" href="#/achievements" aria-label="Все достижения">
+            <div>
+              <span class="badge">🏅 Все достижения</span>
+              <h3>Витрина достижений</h3>
+              <p class="muted">Полученные бейджи, даты и будущая возможность поделиться.</p>
+            </div>
+            <div class="metric">${achievements.length}<small> шт.</small></div>
+            <p>${achievementProgressLabel(achievements)}</p>
+          </a>
         </div>
       </section>
       ${renderRecentBlock(workouts, foodEntries, achievements)}
@@ -573,11 +624,11 @@
             <p class="muted">${lastFood.calories || 0} ккал · ${formatDateTime(lastFood.mealDate)}</p>
           </a>` : emptyMini('Записей питания пока нет', 'Создайте первый прием пищи из раздела «Питание».')}
         ${lastAchievement ? `
-          <div class="card accent">
-            <span class="badge">Достижение</span>
-            <h3>${escapeHtml(lastAchievement.achievement?.title || 'Новое достижение')}</h3>
-            <p class="muted">${escapeHtml(lastAchievement.achievement?.description || '')}</p>
-          </div>` : emptyMini('Достижения появятся автоматически', 'Backend выдает их за тренировки и записи питания.')}
+          <a class="card accent" href="#/achievements/${encodeURIComponent(achievementId(lastAchievement))}">
+            <span class="badge">${achievementIcon(lastAchievement)} Достижение</span>
+            <h3>${escapeHtml(achievementTitle(lastAchievement))}</h3>
+            <p class="muted">${escapeHtml(achievementDescription(lastAchievement))}</p>
+          </a>` : emptyMini('Достижения появятся автоматически', 'Backend выдает их за тренировки и записи питания.')}
       </div>
     `;
   }
@@ -871,6 +922,88 @@
     `;
   }
 
+
+  function renderAchievementsRoute(parts) {
+    if (state.error) {
+      return pageHeader('Достижения', 'Не удалось получить данные.') + alertHtml('error', state.error);
+    }
+    if (!state.achievements) {
+      return pageHeader('Достижения', 'Получаем список достижений пользователя.') + skeletonGrid();
+    }
+
+    if (parts[1]) {
+      const item = findAchievementById(state.achievements, parts[1]);
+      return renderAchievementDetails(item);
+    }
+
+    const achievements = state.achievements || [];
+    const totalPoints = achievements.reduce((sum, item) => sum + Number(achievementPoints(item) || 0), 0);
+
+    return `
+      ${flashHtml()}
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">Прогресс</p>
+          <h1 style="font-size: clamp(38px, 5vw, 64px);">Достижения</h1>
+          <p>${achievements.length} достижений${totalPoints ? ` · ${totalPoints} очков` : ''}. Здесь можно демонстрировать бейджи пользователя.</p>
+        </div>
+        <div class="btn-row">
+          <a class="btn" href="#/profile">В профиль</a>
+        </div>
+      </section>
+      ${achievements.length ? `<div class="achievement-grid">${achievements.map(achievementListItem).join('')}</div>` : emptyState('Достижений пока нет', 'Frontend показывает только достижения, которые пришли от backend через /api/users/me/achievements.', '#/profile', 'В профиль')}
+    `;
+  }
+
+  function achievementListItem(item) {
+    return `
+      <a class="card achievement-tile" href="#/achievements/${encodeURIComponent(achievementId(item))}">
+        <div class="achievement-icon" aria-hidden="true">${achievementIcon(item)}</div>
+        <div>
+          <span class="badge">${escapeHtml(achievementCategory(item))}</span>
+          <h3>${escapeHtml(achievementTitle(item))}</h3>
+          <p class="muted">${escapeHtml(achievementDescription(item))}</p>
+        </div>
+        <div class="item-meta">
+          <span>${formatDateTime(achievementEarnedAt(item))}</span>
+          ${achievementPoints(item) ? `<span>·</span><span>${achievementPoints(item)} очков</span>` : ''}
+        </div>
+      </a>`;
+  }
+
+  function renderAchievementDetails(item) {
+    if (!item) {
+      return pageHeader('Достижение', 'Запись не найдена.') + emptyState('Достижение не найдено', 'Вернитесь к списку достижений.', '#/achievements', 'К списку');
+    }
+
+    return `
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">Детали достижения</p>
+          <h1 style="font-size: clamp(34px, 5vw, 56px);">${escapeHtml(achievementTitle(item))}</h1>
+          <p>${escapeHtml(achievementDescription(item))}</p>
+        </div>
+        <div class="btn-row">
+          <button class="btn ghost" type="button" data-show-achievement="${escapeHtml(achievementId(item))}">Показать анимацию</button>
+          <a class="btn" href="#/achievements">К списку</a>
+        </div>
+      </section>
+      <article class="detail-card achievement-detail">
+        <div class="achievement-icon large" aria-hidden="true">${achievementIcon(item)}</div>
+        <div class="detail-grid">
+          <div class="detail-cell"><strong>Категория</strong>${escapeHtml(achievementCategory(item))}</div>
+          <div class="detail-cell"><strong>Получено</strong>${formatDateTime(achievementEarnedAt(item))}</div>
+          <div class="detail-cell"><strong>Очки</strong>${achievementPoints(item) || '—'}</div>
+          <div class="detail-cell"><strong>ID</strong>${escapeHtml(shortId(achievementId(item)))}</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn ghost" type="button" data-share-stub>Поделиться позже</button>
+          <a class="btn" href="#/profile">В профиль</a>
+        </div>
+      </article>
+    `;
+  }
+
   function renderFeedPlaceholder() {
     return `
       <section class="section-header">
@@ -960,6 +1093,40 @@
       button.addEventListener('click', () => loadDashboard(true));
     });
 
+    app.querySelectorAll('[data-accept-achievement]').forEach((button) => {
+      button.addEventListener('click', () => {
+        showNextAchievementOrClose();
+        renderRoute(false);
+      });
+    });
+
+    app.querySelectorAll('[data-share-achievement]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.achievementShareNotice = 'Скоро здесь будет публикация достижения в ленту. Пока это демонстрационная заглушка.';
+        renderRoute(false);
+      });
+    });
+
+    app.querySelectorAll('[data-share-stub]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.flash = 'Поделиться достижением можно будет после подключения ленты постов.';
+        renderRoute(false);
+      });
+    });
+
+
+    app.querySelectorAll('[data-show-achievement]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const item = findAchievementById(state.achievements || [], button.dataset.showAchievement);
+        if (!item) {
+          state.flash = 'Достижение не найдено в данных backend.';
+        } else {
+          showAchievementModal(item);
+        }
+        renderRoute(false);
+      });
+    });
+
     app.querySelectorAll('[data-delete-workout]').forEach((button) => {
       button.addEventListener('click', async () => {
         if (!confirm('Удалить эту тренировку?')) return;
@@ -1017,12 +1184,16 @@
 
     try {
       disableForm(form, true);
+      const previousAchievementIds = achievementIdSet(state.achievements || []);
       await apiFetch(id ? `/api/workouts/${encodeURIComponent(id)}` : '/api/workouts', {
         method: id ? 'PATCH' : 'POST',
         body: JSON.stringify(payload),
       });
       state.flash = id ? 'Тренировка обновлена.' : 'Тренировка создана и добавлена в профиль.';
-      await loadDashboard(true);
+      await loadDashboard(true, {
+        animateNewAchievements: true,
+        previousAchievementIds,
+      });
       navigate('/profile');
     } catch (error) {
       state.error = friendlyError(error);
@@ -1048,12 +1219,16 @@
 
     try {
       disableForm(form, true);
+      const previousAchievementIds = achievementIdSet(state.achievements || []);
       await apiFetch(id ? `/api/food-entries/${encodeURIComponent(id)}` : '/api/food-entries', {
         method: id ? 'PATCH' : 'POST',
         body: JSON.stringify(payload),
       });
       state.flash = id ? 'Прием пищи обновлен.' : 'Прием пищи создан и добавлен в профиль.';
-      await loadDashboard(true);
+      await loadDashboard(true, {
+        animateNewAchievements: true,
+        previousAchievementIds,
+      });
       navigate('/profile');
     } catch (error) {
       state.error = friendlyError(error);
@@ -1094,6 +1269,176 @@
       binary += String.fromCharCode(byte);
     });
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+
+  function achievementModalHtml() {
+    if (!state.achievementModal) {
+      return '';
+    }
+
+    const item = state.achievementModal;
+    return `
+      <div class="achievement-overlay" role="dialog" aria-modal="true" aria-labelledby="achievement-title">
+        <div class="confetti-layer" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <section class="achievement-modal">
+          <div class="achievement-burst" aria-hidden="true">
+            <span>${achievementIcon(item)}</span>
+          </div>
+          <p class="eyebrow">${state.achievementQueueTotal > 1 ? `Новое достижение · ${state.achievementQueueIndex} из ${state.achievementQueueTotal}` : 'Новое достижение'}</p>
+          <h2 id="achievement-title">${escapeHtml(achievementTitle(item))}</h2>
+          <p class="lead">${escapeHtml(achievementDescription(item))}</p>
+          <div class="achievement-meta-row">
+            <span class="badge">${escapeHtml(achievementCategory(item))}</span>
+            <span class="badge">${formatDateTime(achievementEarnedAt(item))}</span>
+          </div>
+          ${state.achievementShareNotice ? alertHtml('success', state.achievementShareNotice) : ''}
+          <div class="btn-row achievement-actions">
+            <button class="btn" type="button" data-accept-achievement>Принять</button>
+            <button class="btn ghost" type="button" data-share-achievement>Поделиться</button>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  async function fetchAchievements() {
+    try {
+      const achievements = await apiFetch('/api/users/me/achievements');
+      return Array.isArray(achievements) ? achievements : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function normalizeAchievements(items) {
+    return [...(items || [])].sort((a, b) => new Date(achievementEarnedAt(b)).getTime() - new Date(achievementEarnedAt(a)).getTime());
+  }
+
+  function achievementIdSet(collection) {
+    return new Set((collection || []).map(achievementId).filter(Boolean));
+  }
+
+  function seenAchievementsStorageKey() {
+    const userKey = state.user?.id || state.user?.userId || state.user?.keycloakId || state.user?.username || state.user?.email || 'anonymous';
+    return `${STORAGE.seenAchievements}:${userKey}`;
+  }
+
+  function readSeenAchievementIds() {
+    try {
+      const data = JSON.parse(localStorage.getItem(seenAchievementsStorageKey()) || '[]');
+      return new Set(Array.isArray(data) ? data.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function markAchievementsSeen(collection) {
+    const ids = achievementIdSet(collection);
+    if (!ids.size) {
+      return;
+    }
+
+    const seen = readSeenAchievementIds();
+    ids.forEach((id) => seen.add(id));
+    localStorage.setItem(seenAchievementsStorageKey(), JSON.stringify([...seen]));
+  }
+
+  function findNewAchievements(collection, previousIds = new Set()) {
+    const seen = readSeenAchievementIds();
+    return (collection || []).filter((item) => {
+      const id = achievementId(item);
+      return id && !previousIds.has(id) && !seen.has(id);
+    });
+  }
+
+  function showAchievementQueue(items) {
+    const list = (Array.isArray(items) ? items : [items]).filter(Boolean);
+    if (!list.length) {
+      return;
+    }
+
+    state.achievementModal = list[0];
+    state.achievementQueue = list.slice(1);
+    state.achievementQueueTotal = list.length;
+    state.achievementQueueIndex = 1;
+    state.achievementShareNotice = null;
+  }
+
+  function showAchievementModal(item) {
+    showAchievementQueue(item ? [item] : []);
+  }
+
+  function showNextAchievementOrClose() {
+    state.achievementShareNotice = null;
+
+    const next = state.achievementQueue.shift();
+    if (next) {
+      state.achievementModal = next;
+      state.achievementQueueIndex += 1;
+      return;
+    }
+
+    state.achievementModal = null;
+    state.achievementQueue = [];
+    state.achievementQueueTotal = 0;
+    state.achievementQueueIndex = 0;
+    navigate('/profile');
+  }
+
+  function achievementId(item) {
+    const source = item?.achievement || item || {};
+    return String(item?.id || item?.achievementId || source.id || source.code || source.title || 'achievement');
+  }
+
+  function achievementTitle(item) {
+    const source = item?.achievement || item || {};
+    return source.title || source.name || item?.title || item?.name || 'Новое достижение';
+  }
+
+  function achievementDescription(item) {
+    const source = item?.achievement || item || {};
+    return source.description || item?.description || 'Описание достижения появится здесь.';
+  }
+
+  function achievementCategory(item) {
+    const source = item?.achievement || item || {};
+    return source.category || source.type || item?.category || item?.type || 'Достижение';
+  }
+
+  function achievementPoints(item) {
+    const source = item?.achievement || item || {};
+    return Number(source.points ?? item?.points ?? 0);
+  }
+
+  function achievementEarnedAt(item) {
+    const source = item?.achievement || item || {};
+    return item?.earnedAt || item?.awardedAt || item?.createdAt || source.earnedAt || source.createdAt || new Date().toISOString();
+  }
+
+  function achievementIcon(item) {
+    const source = item?.achievement || item || {};
+    if (source.icon || item?.icon) {
+      return source.icon || item.icon;
+    }
+    const text = `${achievementTitle(item)} ${achievementCategory(item)}`.toLowerCase();
+    if (text.includes('трен')) return '🏃';
+    if (text.includes('питан') || text.includes('еда') || text.includes('калор')) return '🥗';
+    if (text.includes('рег') || text.includes('перв') || text.includes('добро')) return '🏅';
+    return '⭐';
+  }
+
+  function achievementProgressLabel(achievements) {
+    const count = achievements.length;
+    if (!count) return 'бейджи появятся после действий';
+    const points = achievements.reduce((sum, item) => sum + achievementPoints(item), 0);
+    return points ? `${points} очков прогресса` : 'полученные бейджи';
+  }
+
+  function findAchievementById(collection, id) {
+    return (collection || []).find((item) => String(achievementId(item)) === String(id));
   }
 
   function workoutTypeOptions(value) {
