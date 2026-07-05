@@ -1,5 +1,6 @@
 package ru.innopolis.tbank.thealth.controllers;
 
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,7 +44,7 @@ public class RecipeController {
 
     @PostMapping
     public ResponseEntity<RecipeResponse> createRecipe(
-            @RequestBody RecipeCreateRequest recipeCreateRequest,
+            @Valid @RequestBody RecipeCreateRequest recipeCreateRequest,
             @AuthenticationPrincipal Jwt jwt
     ) {
         var res = recipeService.createRecipe(recipeCreateRequest, jwt);
@@ -53,7 +54,7 @@ public class RecipeController {
     @PatchMapping("/{id}")
     public ResponseEntity<RecipeResponse> updateRecipe(
             @PathVariable("id") UUID id,
-            @RequestBody RecipeUpdateRequest recipeUpdateRequest,
+            @Valid @RequestBody RecipeUpdateRequest recipeUpdateRequest,
             @AuthenticationPrincipal Jwt jwt
     ) {
         var res = recipeService.updateRecipe(id, jwt, recipeUpdateRequest);

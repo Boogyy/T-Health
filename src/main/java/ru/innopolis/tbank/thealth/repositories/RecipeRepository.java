@@ -14,4 +14,5 @@ public interface RecipeRepository extends JpaRepository<RecipeEntity, UUID> {
 
     List<RecipeEntity> findAllByUser_KeycloakIdOrderByCreatedAtDesc(UUID userId);
 
+    void deleteAllByUser_KeycloakId(UUID keycloakId);
 }

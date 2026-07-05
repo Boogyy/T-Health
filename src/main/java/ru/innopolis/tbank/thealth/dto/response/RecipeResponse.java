@@ -1,6 +1,8 @@
 package ru.innopolis.tbank.thealth.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,6 +19,12 @@ public record RecipeResponse(
 
         @Schema(description = "Название рецепта", example = "Овсянка с ягодами")
         String title,
+
+        @Schema(description = "Описание", example = "Высокоуглеводный завтрак")
+        String description,
+
+        @Schema(description = "Ингредиенты для блюда", example = "Овсяные хлопья, клубника")
+        String ingredients,
 
         @Schema(description = "Калории", example = "350")
         Integer calories,

@@ -17,8 +17,10 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
 
     boolean existsByWorkout_Id(UUID workoutId);
 
-    boolean existsByFoodEntry_Id(UUID foodEntryId);
+    boolean existsByRecipe_Id(UUID recipeId);
 
     boolean existsByUserAchievement_Id(UUID userAchievementId);
+
+    void deleteAllByUser_KeycloakId(UUID keycloakId);
 
 }

@@ -1,14 +1,19 @@
 package ru.innopolis.tbank.thealth.controllers;
 
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import ru.innopolis.tbank.thealth.dto.request.PostInfoRequest;
+import ru.innopolis.tbank.thealth.dto.request.RecipePostCreateRequest;
+import ru.innopolis.tbank.thealth.dto.request.RecipeUpdateRequest;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutPostCreateRequest;
-import ru.innopolis.tbank.thealth.entities.PostEntity;
+import ru.innopolis.tbank.thealth.dto.response.PostResponse;
 import ru.innopolis.tbank.thealth.services.PostService;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -21,54 +26,74 @@ public class PostController {
         this.postService = postService;
     }
 
-    @PostMapping("/achievements/{id}/share")
-    public ResponseEntity<String> postAchievementEntry(
-            @PathVariable("id") UUID id,
+    @GetMapping
+    public ResponseEntity<List<PostResponse>> getAllPosts (
+
+    ) {
+        var res = postService.getPosts();
+        return ResponseEntity.status(HttpStatus.OK).body(res);
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<PostResponse>> getUserPosts (
             @AuthenticationPrincipal Jwt jwt
+    ) {
+        var res = postService.getUserPosts(jwt);
+        return ResponseEntity.status(HttpStatus.OK).body(res);
+    }
+
+    @PostMapping("/achievements/{id}/share")
+    public ResponseEntity<PostResponse> postAchievement(
+            @PathVariable("id") UUID id,
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody PostInfoRequest request
             ) {
-        var res = postService.postAchievement(id, jwt);
-        return ResponseEntity.ok("Everything is fine");
+        var res = postService.postAchievement(id, jwt, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
 
     }
 
-    @PostMapping("/food-entries/{id}/share")
-    public ResponseEntity<String> postFoodEntry(
-            @PathVariable("id") UUID id
+    @PostMapping("/recipes/{id}/share")
+    public ResponseEntity<PostResponse> postRecipe(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody PostInfoRequest request
     ) {
-        var res = postService.postFood(id);
-        return ResponseEntity.ok("Everything is fine");
+        var res = postService.postRecipe(id, jwt, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
 
     }
 
-    @PostMapping("/workous/{id}/share")
-    public ResponseEntity<String> postWorkoutEntry(
-            @PathVariable("id") UUID id
+    @PostMapping("/workouts/{id}/share")
+    public ResponseEntity<PostResponse> postWorkout(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody PostInfoRequest request
     ) {
-        var res = postService.postWorkout(id);
-        return ResponseEntity.ok("Everything is fine");
+        var res = postService.postWorkout(id, jwt, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
 
     }
-
-//    @PostMapping("/food-entry")
-//    public ResponseEntity<String> createFoodPost(
-//            @AuthenticationPrincipal Jwt jwt,
-//            @RequestBody WorkoutPostCreateRequest workoutPostCreateRequest
-//    ) {
-//        var res = postService.createFoodEntryPost(jwt, workoutPostCreateRequest);
-//        return ResponseEntity.ok("Everything is fine");
-//
-//    }
 
     @PostMapping("/workouts")
-    public ResponseEntity<PostEntity> createWorkoutPost(
+    public ResponseEntity<PostResponse> createWorkoutPost(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody WorkoutPostCreateRequest workoutPostCreateRequest
+            @Valid @RequestBody WorkoutPostCreateRequest workoutPostCreateRequest
     ) {
         var res = postService.createWorkoutEntryPost(jwt, workoutPostCreateRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
 
     }
 
+    @PostMapping("/recipes")
+    public ResponseEntity<PostResponse> createRecipePost(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody RecipePostCreateRequest recipePostCreateRequest
+    ) {
+        var res = postService.createRecipePost(jwt, recipePostCreateRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
+
+    }
 
 
 

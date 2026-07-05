@@ -15,7 +15,6 @@ public class PostEntity {
 
     }
 
-
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -136,6 +135,14 @@ public class PostEntity {
 
     public void setPostType(PostType postType) {
         this.postType = postType;
+    }
+
+    public CommunityEntity getCommunity() {
+        return community;
+    }
+
+    public void setCommunity(CommunityEntity community) {
+        this.community = community;
     }
 
     public String getTitle() {

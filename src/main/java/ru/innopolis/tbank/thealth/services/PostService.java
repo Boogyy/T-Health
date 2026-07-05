@@ -2,20 +2,21 @@ package ru.innopolis.tbank.thealth.services;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.innopolis.tbank.thealth.dto.request.PostInfoRequest;
+import ru.innopolis.tbank.thealth.dto.request.RecipePostCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutPostCreateRequest;
-import ru.innopolis.tbank.thealth.entities.PostEntity;
-import ru.innopolis.tbank.thealth.entities.UserAchievementEntity;
-import ru.innopolis.tbank.thealth.entities.UserEntity;
-import ru.innopolis.tbank.thealth.entities.WorkoutEntity;
+import ru.innopolis.tbank.thealth.dto.response.PostResponse;
+import ru.innopolis.tbank.thealth.entities.*;
 import ru.innopolis.tbank.thealth.enums.PostType;
-import ru.innopolis.tbank.thealth.exceptions.AchievementUserNotFoundException;
-import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
-import ru.innopolis.tbank.thealth.repositories.PostRepository;
-import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
-import ru.innopolis.tbank.thealth.repositories.UserRepository;
-import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
+import ru.innopolis.tbank.thealth.enums.PostVisibility;
+import ru.innopolis.tbank.thealth.exceptions.*;
+import ru.innopolis.tbank.thealth.mappers.PostMapper;
+import ru.innopolis.tbank.thealth.repositories.*;
 
+import java.util.List;
 import java.util.UUID;
+
 
 @Service
 public class PostService {
@@ -24,70 +25,190 @@ public class PostService {
     private final UserRepository userRepository;
     private final WorkoutRepository workoutRepository;
     private final PostRepository postRepository;
+    private final RecipeRepository recipeRepository;
+    private final PostMapper postMapper;
 
     public PostService(
             UserAchievementRepository userAchievementRepository,
             UserRepository userRepository,
-            WorkoutRepository workoutRepository, PostRepository postRepository) {
+            WorkoutRepository workoutRepository,
+            PostRepository postRepository,
+            RecipeRepository recipeRepository,
+            PostMapper postMapper
+    ) {
         this.userAchievementRepository = userAchievementRepository;
         this.userRepository = userRepository;
         this.workoutRepository = workoutRepository;
         this.postRepository = postRepository;
+        this.recipeRepository = recipeRepository;
+        this.postMapper = postMapper;
     }
 
-    public Object createAchievementPost(UUID id) {
-        return null;
+    public List<PostResponse> getPosts() {
+        return postRepository.findAllByVisibilityOrderByCreatedAtDesc(PostVisibility.PUBLIC)
+                .stream()
+                .map(postMapper::toPostResponse)
+                .toList();
     }
 
-    public Object postAchievement(UUID id, Jwt jwt) {
-        UserAchievementEntity check = userAchievementRepository
+    public List<PostResponse> getUserPosts(Jwt jwt) {
+        UserEntity user = checkUser(jwt);
+        return postRepository.findAllByUser_KeycloakIdOrderByCreatedAtDesc(user.getKeycloakId())
+                .stream()
+                .map(postMapper::toPostResponse)
+                .toList();
+    }
+
+    @Transactional
+    public PostResponse postAchievement(UUID id, Jwt jwt, PostInfoRequest request) {
+        if (postRepository.existsByUserAchievement_Id(id)) {
+            throw new ConflictException("Achievement is already published");
+        }
+
+        UserAchievementEntity userAchievement = userAchievementRepository
                 .findByIdAndUser_KeycloakId(id, getKeycloakId(jwt))
                 .orElseThrow(() -> new AchievementUserNotFoundException(id));
 
+        UserEntity user = checkUser(jwt);
 
-        return null;
+        PostEntity postToSave = new PostEntity();
+        postToSave.setUser(user);
+        postToSave.setUserAchievement(userAchievement);
+        postToSave.setPostType(PostType.ACHIEVEMENT);
+        postToSave.setTitle(request.postTitle());
+
+        PostEntity savedPost = postRepository.save(postToSave);
+
+        return postMapper.toPostResponse(savedPost) ;
     }
 
-    public Object postFood(UUID id) {
-        return null;
+    @Transactional
+    public PostResponse postRecipe(UUID id, Jwt jwt, PostInfoRequest request) {
+        if (postRepository.existsByRecipe_Id(id)) {
+            throw new ConflictException("Recipe is already published");
+        }
+
+        UserEntity user = checkUser(jwt);
+        RecipeEntity recipe = recipeRepository
+                .findByIdAndUser_KeycloakId(id, user.getKeycloakId())
+                .orElseThrow(() -> new RecipeNotFoundException(id));
+
+        PostEntity postToSave = createFromRecipe(user, recipe, request.postTitle());
+
+        return postMapper.toPostResponse(postRepository.save(postToSave));
     }
 
-    public Object postWorkout(UUID id) {
-        return null;
+    @Transactional
+    public PostResponse postWorkout(UUID id, Jwt jwt, PostInfoRequest request) {
+        if (postRepository.existsByWorkout_Id(id)) {
+            throw new ConflictException("Workout is already published");
+        }
+
+        UserEntity user = checkUser(jwt);
+
+        WorkoutEntity workout = workoutRepository
+                .findByIdAndUser_KeycloakId(id, getKeycloakId(jwt))
+                .orElseThrow(() -> new WorkoutNotFoundException(id));
+
+        PostEntity postToSave = createFromWorkout(user, workout, request.postTitle());
+        PostEntity savedPost = postRepository.save(postToSave);
+
+        return postMapper.toPostResponse(savedPost);
     }
 
-    public Object createFoodEntryPost(Jwt jwt, WorkoutPostCreateRequest workoutPostCreateRequest) {
-        return null;
+    @Transactional
+    public PostResponse createRecipePost(
+            Jwt jwt,
+            RecipePostCreateRequest recipePostCreateRequest
+    ) {
+        UserEntity user = checkUser(jwt);
+        RecipeEntity recipeToSave = new RecipeEntity();
+
+        recipeToSave.setUser(user);
+        recipeToSave.setTitle(recipePostCreateRequest.recipe().title());
+        recipeToSave.setDescription(recipePostCreateRequest.recipe().description());
+        recipeToSave.setIngredients(recipePostCreateRequest.recipe().ingredients());
+        recipeToSave.setCookingSteps(recipePostCreateRequest.recipe().cookingSteps());
+        recipeToSave.setCalories(recipePostCreateRequest.recipe().calories());
+        recipeToSave.setProteins(recipePostCreateRequest.recipe().proteins());
+        recipeToSave.setFats(recipePostCreateRequest.recipe().fats());
+        recipeToSave.setCarbohydrates(recipePostCreateRequest.recipe().carbohydrates());
+        recipeToSave.setImageUrl(recipePostCreateRequest.recipe().imageUrl());
+
+        RecipeEntity savedRecipe = recipeRepository.save(recipeToSave);
+
+        PostEntity postToSave = createFromRecipe(user, savedRecipe, recipePostCreateRequest.post().postTitle());
+
+        return postMapper.toPostResponse(postRepository.save(postToSave));
     }
 
-    public PostEntity createWorkoutEntryPost(
+
+    @Transactional
+    public PostResponse createWorkoutEntryPost(
             Jwt jwt,
             WorkoutPostCreateRequest workoutPostCreateRequest
     ) {
-        UserEntity user = userRepository.findByKeycloakId(getKeycloakId(jwt))
-                .orElseThrow(() -> new UserNotFoundException(getKeycloakId(jwt)));
+        UserEntity user = checkUser(jwt);
 
         WorkoutEntity workout = new WorkoutEntity();
+
         workout.setUser(user);
-        workout.setTitle(workoutPostCreateRequest.title());
-        workout.setType(workoutPostCreateRequest.type());
-        workout.setDescription(workoutPostCreateRequest.description());
-        workout.setDurationMinutes(workoutPostCreateRequest.durationMinutes());
-        workout.setCaloriesBurned(workoutPostCreateRequest.caloriesBurned());
+        workout.setTitle(workoutPostCreateRequest.workout().title());
+        workout.setType(workoutPostCreateRequest.workout().type());
+        workout.setDescription(workoutPostCreateRequest.workout().description());
+        workout.setDurationMinutes(workoutPostCreateRequest.workout().durationMinutes());
+        workout.setCaloriesBurned(workoutPostCreateRequest.workout().caloriesBurned());
 
         WorkoutEntity savedWorkout = workoutRepository.save(workout);
 
-        PostEntity postEntity = new PostEntity();
-        postEntity.setUser(user);
-        postEntity.setWorkout(savedWorkout);
-        postEntity.setPostType(PostType.WORKOUT);
-        postEntity.setTitle(workoutPostCreateRequest.postTitle());
-
+        PostEntity postEntity = createFromWorkout(user, savedWorkout, workoutPostCreateRequest.post().postTitle());
         PostEntity savedPost = postRepository.save(postEntity);
-        return savedPost;
+
+        return postMapper.toPostResponse(savedPost);
     }
+
+
+    // ----- HELPERS -----
+
 
     private UUID getKeycloakId(Jwt jwt) {
         return UUID.fromString(jwt.getSubject());
     }
+
+    private UserEntity checkUser(Jwt jwt) {
+        return userRepository.findByKeycloakId(getKeycloakId(jwt))
+                .orElseThrow(() -> new UserNotFoundException(getKeycloakId(jwt)));
+    }
+
+
+
+
+    private PostEntity createFromWorkout(
+            UserEntity user,
+            WorkoutEntity workout,
+            String title
+    ) {
+        PostEntity postEntity = new PostEntity();
+        postEntity.setUser(user);
+        postEntity.setWorkout(workout);
+        postEntity.setPostType(PostType.WORKOUT);
+        postEntity.setTitle(title);
+        return postEntity;
+    }
+
+    private PostEntity createFromRecipe(
+            UserEntity user,
+            RecipeEntity recipe,
+            String title
+    ) {
+        PostEntity postEntity = new PostEntity();
+        postEntity.setUser(user);
+        postEntity.setRecipe(recipe);
+        postEntity.setPostType(PostType.RECIPE);
+        postEntity.setTitle(title);
+        return postEntity;
+    }
+
+
+
 }

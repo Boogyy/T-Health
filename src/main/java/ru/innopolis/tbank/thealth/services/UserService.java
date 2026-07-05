@@ -9,10 +9,7 @@ import ru.innopolis.tbank.thealth.dto.response.UserResponse;
 import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
 import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
-import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
-import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
-import ru.innopolis.tbank.thealth.repositories.UserRepository;
-import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
+import ru.innopolis.tbank.thealth.repositories.*;
 
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -26,6 +23,8 @@ public class UserService {
     private final WorkoutRepository workoutRepository;
     private final FoodEntryRepository foodEntryRepository;
     private final UserAchievementRepository userAchievementRepository;
+    private final RecipeRepository recipeRepository;
+    private final PostRepository postRepository;
 
 
 
@@ -35,7 +34,7 @@ public class UserService {
             KeycloakAdminClient keycloakAdminClient,
             WorkoutRepository workoutRepository,
             FoodEntryRepository foodEntryRepository,
-            UserAchievementRepository userAchievementRepository
+            UserAchievementRepository userAchievementRepository, RecipeRepository recipeRepository, PostRepository postRepository
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
@@ -43,6 +42,8 @@ public class UserService {
         this.workoutRepository = workoutRepository;
         this.foodEntryRepository = foodEntryRepository;
         this.userAchievementRepository = userAchievementRepository;
+        this.recipeRepository = recipeRepository;
+        this.postRepository = postRepository;
     }
 
     @Transactional
@@ -128,8 +129,11 @@ public class UserService {
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
+        postRepository.deleteAllByUser_KeycloakId(keycloakId);
+
         workoutRepository.deleteAllByUser_KeycloakId(keycloakId);
         foodEntryRepository.deleteAllByUser_KeycloakId(keycloakId);
+        recipeRepository.deleteAllByUser_KeycloakId(keycloakId);
         userAchievementRepository.deleteAllByUser_KeycloakId(keycloakId);
 
         userRepository.delete(user);

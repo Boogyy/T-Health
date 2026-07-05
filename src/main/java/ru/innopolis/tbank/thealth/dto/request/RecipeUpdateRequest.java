@@ -39,8 +39,8 @@ public record RecipeUpdateRequest (
         @PositiveOrZero
         BigDecimal carbohydrates,
 
-        @Schema(description = "Углеводы в граммах", example = "https://image/6451...a84b7")
+        @Schema(description = "Ссылка на картинку блюда", example = "https://image/6451...a84b7")
         @PositiveOrZero
-        BigDecimal imageUrl
+        String imageUrl
 ) {
 }

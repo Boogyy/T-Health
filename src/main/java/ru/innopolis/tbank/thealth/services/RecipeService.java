@@ -2,6 +2,7 @@ package ru.innopolis.tbank.thealth.services;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.RecipeCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.RecipeUpdateRequest;
 import ru.innopolis.tbank.thealth.dto.response.RecipeResponse;
@@ -9,6 +10,7 @@ import ru.innopolis.tbank.thealth.entities.RecipeEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.exceptions.RecipeNotFoundException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
+import ru.innopolis.tbank.thealth.mappers.RecipeMapper;
 import ru.innopolis.tbank.thealth.repositories.RecipeRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 
@@ -20,14 +22,18 @@ public class RecipeService {
 
     private final UserRepository userRepository;
     private final RecipeRepository recipeRepository;
+    private final RecipeMapper recipeMapper;
 
     public RecipeService(UserRepository userRepository,
-                         RecipeRepository recipeRepository) {
+                         RecipeRepository recipeRepository,
+                         RecipeMapper recipeMapper) {
         this.userRepository = userRepository;
         this.recipeRepository = recipeRepository;
+        this.recipeMapper = recipeMapper;
     }
 
 
+    @Transactional
     public RecipeResponse createRecipe (
             RecipeCreateRequest recipeCreateRequest,
             Jwt jwt
@@ -46,9 +52,10 @@ public class RecipeService {
         recipeToSave.setImageUrl(recipeCreateRequest.imageUrl());
 
         var recipe = recipeRepository.save(recipeToSave);
-        return toResponse(recipe);
+        return recipeMapper.toRecipeResponse(recipe);
     }
 
+    @Transactional
     public RecipeResponse updateRecipe(
             UUID recipeId,
             Jwt jwt,
@@ -61,6 +68,22 @@ public class RecipeService {
 
         if (recipeUpdateRequest.title() != null && !recipeUpdateRequest.title().isBlank()) {
             recipe.setTitle(recipeUpdateRequest.title());
+        }
+
+        if (recipeUpdateRequest.description() != null && !recipeUpdateRequest.description().isBlank()) {
+            recipe.setDescription(recipeUpdateRequest.description());
+        }
+
+        if (recipeUpdateRequest.ingredients() != null && !recipeUpdateRequest.ingredients().isBlank()) {
+            recipe.setIngredients(recipeUpdateRequest.ingredients());
+        }
+
+        if (recipeUpdateRequest.cookingSteps() != null && !recipeUpdateRequest.cookingSteps().isBlank()) {
+            recipe.setCookingSteps(recipeUpdateRequest.cookingSteps());
+        }
+
+        if (recipeUpdateRequest.imageUrl() != null && !recipeUpdateRequest.imageUrl().isBlank()) {
+            recipe.setImageUrl(recipeUpdateRequest.imageUrl());
         }
 
         if (recipeUpdateRequest.calories() != null) {
@@ -79,25 +102,30 @@ public class RecipeService {
             recipe.setCarbohydrates(recipeUpdateRequest.carbohydrates());
         }
 
-        return toResponse(recipe);
+
+
+        return recipeMapper.toRecipeResponse(recipe);
 
     }
 
 
+    @Transactional
     public List<RecipeResponse> getAllUserRecipes(Jwt jwt) {
         UserEntity user = ensureExist(jwt);
         return recipeRepository.findAllByUser_KeycloakIdOrderByCreatedAtDesc(user.getKeycloakId())
                 .stream()
-                .map(this::toResponse)
+                .map(recipeMapper::toRecipeResponse)
                 .toList();
 
     }
 
+    @Transactional
     public RecipeResponse getRecipeById(UUID recipeId, Jwt jwt) {
         RecipeEntity recipe = findOwnedRecipe(recipeId, getId(jwt));
-        return toResponse(recipe);
+        return recipeMapper.toRecipeResponse(recipe);
     }
 
+    @Transactional
     public void deleteById(Jwt jwt, UUID id) {
         RecipeEntity recipeToDelete = findOwnedRecipe(id, getId(jwt));
         recipeRepository.delete(recipeToDelete);
@@ -111,19 +139,6 @@ public class RecipeService {
         return UUID.fromString(jwt.getSubject());
     }
 
-    private RecipeResponse toResponse(RecipeEntity recipe) {
-        return new RecipeResponse(
-                recipe.getId(),
-                recipe.getUser().getKeycloakId(),
-                recipe.getTitle(),
-                recipe.getCalories(),
-                recipe.getProteins(),
-                recipe.getFats(),
-                recipe.getCarbohydrates(),
-                recipe.getCreatedAt(),
-                recipe.getUpdatedAt()
-        );
-    }
 
     private RecipeEntity findOwnedRecipe(UUID recipeId, UUID userId) {
         return recipeRepository.findByIdAndUser_KeycloakId(recipeId, userId)
