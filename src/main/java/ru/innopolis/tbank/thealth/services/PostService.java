@@ -1,10 +1,12 @@
 package ru.innopolis.tbank.thealth.services;
 
+import jakarta.validation.Valid;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.PostInfoRequest;
 import ru.innopolis.tbank.thealth.dto.request.RecipePostCreateRequest;
+import ru.innopolis.tbank.thealth.dto.request.TextPostCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutPostCreateRequest;
 import ru.innopolis.tbank.thealth.dto.response.PostResponse;
 import ru.innopolis.tbank.thealth.entities.*;
@@ -44,32 +46,50 @@ public class PostService {
         this.postMapper = postMapper;
     }
 
-    public List<PostResponse> getPosts() {
-        return postRepository.findAllByVisibilityOrderByCreatedAtDesc(PostVisibility.PUBLIC)
+    @Transactional(readOnly = true)
+    public List<PostResponse> getPosts(PostType type) {
+        if (type == null) {
+            return postRepository.findAllByVisibilityOrderByCreatedAtDesc(PostVisibility.PUBLIC)
+                    .stream()
+                    .map(postMapper::toPostResponse)
+                    .toList();
+        }
+
+        return postRepository.findAllByVisibilityAndPostTypeOrderByCreatedAtDesc(PostVisibility.PUBLIC, type)
                 .stream()
                 .map(postMapper::toPostResponse)
                 .toList();
+
     }
 
-    public List<PostResponse> getUserPosts(Jwt jwt) {
+    @Transactional(readOnly = true)
+    public List<PostResponse> getUserPosts(Jwt jwt, PostType type) {
         UserEntity user = checkUser(jwt);
-        return postRepository.findAllByUser_KeycloakIdOrderByCreatedAtDesc(user.getKeycloakId())
+        if (type == null) {
+            return postRepository.findAllByUser_KeycloakIdOrderByCreatedAtDesc(user.getKeycloakId())
+                    .stream()
+                    .map(postMapper::toPostResponse)
+                    .toList();
+        }
+
+        return postRepository.findAllByUser_KeycloakIdAndPostTypeOrderByCreatedAtDesc(user.getKeycloakId(), type)
                 .stream()
                 .map(postMapper::toPostResponse)
                 .toList();
+
     }
 
     @Transactional
     public PostResponse postAchievement(UUID id, Jwt jwt, PostInfoRequest request) {
-        if (postRepository.existsByUserAchievement_Id(id)) {
-            throw new ConflictException("Achievement is already published");
-        }
+        UserEntity user = checkUser(jwt);
 
         UserAchievementEntity userAchievement = userAchievementRepository
                 .findByIdAndUser_KeycloakId(id, getKeycloakId(jwt))
                 .orElseThrow(() -> new AchievementUserNotFoundException(id));
 
-        UserEntity user = checkUser(jwt);
+        if (postRepository.existsByUserAchievement_Id(id)) {
+            throw new ConflictException("Achievement is already published");
+        }
 
         PostEntity postToSave = new PostEntity();
         postToSave.setUser(user);
@@ -84,14 +104,14 @@ public class PostService {
 
     @Transactional
     public PostResponse postRecipe(UUID id, Jwt jwt, PostInfoRequest request) {
-        if (postRepository.existsByRecipe_Id(id)) {
-            throw new ConflictException("Recipe is already published");
-        }
-
         UserEntity user = checkUser(jwt);
         RecipeEntity recipe = recipeRepository
                 .findByIdAndUser_KeycloakId(id, user.getKeycloakId())
                 .orElseThrow(() -> new RecipeNotFoundException(id));
+
+        if (postRepository.existsByRecipe_Id(id)) {
+            throw new ConflictException("Recipe is already published");
+        }
 
         PostEntity postToSave = createFromRecipe(user, recipe, request.postTitle());
 
@@ -100,15 +120,15 @@ public class PostService {
 
     @Transactional
     public PostResponse postWorkout(UUID id, Jwt jwt, PostInfoRequest request) {
-        if (postRepository.existsByWorkout_Id(id)) {
-            throw new ConflictException("Workout is already published");
-        }
-
         UserEntity user = checkUser(jwt);
 
         WorkoutEntity workout = workoutRepository
                 .findByIdAndUser_KeycloakId(id, getKeycloakId(jwt))
                 .orElseThrow(() -> new WorkoutNotFoundException(id));
+
+        if (postRepository.existsByWorkout_Id(id)) {
+            throw new ConflictException("Workout is already published");
+        }
 
         PostEntity postToSave = createFromWorkout(user, workout, request.postTitle());
         PostEntity savedPost = postRepository.save(postToSave);
@@ -167,6 +187,22 @@ public class PostService {
         return postMapper.toPostResponse(savedPost);
     }
 
+    @Transactional
+    public PostResponse createTextPost(
+            Jwt jwt,
+            TextPostCreateRequest textPostCreateRequest
+    ) {
+        UserEntity user = checkUser(jwt);
+
+        PostEntity entityToSave = new PostEntity();
+        entityToSave.setUser(user);
+        entityToSave.setPostType(PostType.TEXT);
+        entityToSave.setTitle(textPostCreateRequest.post().postTitle());
+        entityToSave.setContent(textPostCreateRequest.content());
+
+        return postMapper.toPostResponse(postRepository.save(entityToSave));
+    }
+
 
     // ----- HELPERS -----
 
@@ -208,7 +244,4 @@ public class PostService {
         postEntity.setTitle(title);
         return postEntity;
     }
-
-
-
 }

@@ -6,18 +6,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import ru.innopolis.tbank.thealth.dto.request.PostInfoRequest;
-import ru.innopolis.tbank.thealth.dto.request.RecipePostCreateRequest;
-import ru.innopolis.tbank.thealth.dto.request.RecipeUpdateRequest;
-import ru.innopolis.tbank.thealth.dto.request.WorkoutPostCreateRequest;
+import ru.innopolis.tbank.thealth.dto.request.*;
 import ru.innopolis.tbank.thealth.dto.response.PostResponse;
+import ru.innopolis.tbank.thealth.enums.PostType;
 import ru.innopolis.tbank.thealth.services.PostService;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("api/posts")
+@RequestMapping("/api/posts")
 public class PostController {
 
     private final PostService postService;
@@ -26,19 +24,20 @@ public class PostController {
         this.postService = postService;
     }
 
-    @GetMapping
+    @GetMapping("/feed")
     public ResponseEntity<List<PostResponse>> getAllPosts (
-
+            @RequestParam(required = false) PostType type
     ) {
-        var res = postService.getPosts();
+        var res = postService.getPosts(type);
         return ResponseEntity.status(HttpStatus.OK).body(res);
     }
 
     @GetMapping("/me")
     public ResponseEntity<List<PostResponse>> getUserPosts (
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-        var res = postService.getUserPosts(jwt);
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) PostType type
+            ) {
+        var res = postService.getUserPosts(jwt, type);
         return ResponseEntity.status(HttpStatus.OK).body(res);
     }
 
@@ -95,6 +94,13 @@ public class PostController {
 
     }
 
+    @PostMapping("/text")
+    public ResponseEntity<PostResponse> createTextPost(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody TextPostCreateRequest textPostCreateRequest
+    ) {
+        var res = postService.createTextPost(jwt, textPostCreateRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
 
-
+    }
 }
