@@ -26,6 +26,9 @@ public record RecipeResponse(
         @Schema(description = "Ингредиенты для блюда", example = "Овсяные хлопья, клубника")
         String ingredients,
 
+        @Schema(description = "Шаги приготовления блюда", example = "Сварить яйца")
+        String cookingSteps,
+
         @Schema(description = "Калории", example = "350")
         Integer calories,
 
@@ -37,6 +40,9 @@ public record RecipeResponse(
 
         @Schema(description = "Углеводы в граммах", example = "55.0")
         BigDecimal carbohydrates,
+
+        @Schema(description = "Ссылка на фото")
+        String imageUrl,
 
         @Schema(description = "Дата создания записи", example = "2026-06-26T09:10:00")
         LocalDateTime createdAt,

@@ -26,7 +26,7 @@ import java.util.UUID;
 )
 @SecurityRequirement(name = "bearerAuth")
 @RestController
-@RequestMapping("api/users")
+@RequestMapping("/api/users")
 public class UserController {
 
     private final UserService userService;

@@ -12,15 +12,15 @@ public record RecipeUpdateRequest (
         String title,
 
         @Schema(description = "Описание", example = "Высокоуглеводный завтрак")
-        @Size(max = 128)
+        @Size(max = 512)
         String description,
 
         @Schema(description = "Ингредиенты для блюда", example = "Овсяные хлопья, клубника")
-        @Size(max = 128)
+        @Size(max = 2000)
         String ingredients,
 
         @Schema(description = "Шаги приготовления", example = "Залить овсянку в соотношении 1 к 3...")
-        @Size(max = 128)
+        @Size(max = 4000)
         String cookingSteps,
 
         @Schema(description = "Калории", example = "350")
@@ -40,7 +40,8 @@ public record RecipeUpdateRequest (
         BigDecimal carbohydrates,
 
         @Schema(description = "Ссылка на картинку блюда", example = "https://image/6451...a84b7")
-        @PositiveOrZero
+        @org.hibernate.validator.constraints.URL
+        @Size(max = 512)
         String imageUrl
 ) {
 }

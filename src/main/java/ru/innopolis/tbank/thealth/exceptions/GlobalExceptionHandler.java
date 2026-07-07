@@ -12,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import ru.innopolis.tbank.thealth.dto.response.ErrorResponse;
 
 import java.time.LocalDateTime;
@@ -82,6 +83,21 @@ public class GlobalExceptionHandler {
         ErrorResponse response = buildResponse(
                 HttpStatus.BAD_REQUEST,
                 "Invalid request body",
+                request.getRequestURI(),
+                null
+        );
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatchException(
+            MethodArgumentTypeMismatchException exception,
+            HttpServletRequest request
+    ) {
+        ErrorResponse response = buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "Invalid request parameter: " + exception.getName(),
                 request.getRequestURI(),
                 null
         );

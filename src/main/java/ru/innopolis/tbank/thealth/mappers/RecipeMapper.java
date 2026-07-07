@@ -17,10 +17,12 @@ public class RecipeMapper {
                 recipe.getTitle(),
                 recipe.getDescription(),
                 recipe.getIngredients(),
+                recipe.getCookingSteps(),
                 recipe.getCalories(),
                 recipe.getProteins(),
                 recipe.getFats(),
                 recipe.getCarbohydrates(),
+                recipe.getImageUrl(),
                 recipe.getCreatedAt(),
                 recipe.getUpdatedAt()
         );

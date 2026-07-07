@@ -21,13 +21,13 @@ public class RecipeEntity {
     @Column(name = "title", nullable = false, length = 128)
     private String title;
 
-    @Column(name = "description", nullable = false, length = 512)
+    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "ingredients", nullable = false, length = 512)
+    @Column(name = "ingredients", nullable = false, columnDefinition = "TEXT")
     private String ingredients;
 
-    @Column(name = "cooking_steps", nullable = false, length = 512)
+    @Column(name = "cooking_steps", nullable = false, columnDefinition = "TEXT")
     private String cookingSteps;
 
     @Column(name = "calories")
@@ -42,7 +42,7 @@ public class RecipeEntity {
     @Column(name = "carbohydrates", precision = 6, scale = 2)
     private BigDecimal carbohydrates;
 
-    @Column(name = "image_url", length = 256)
+    @Column(name = "image_url", length = 512)
     private String imageUrl;
 
     @Column(name = "created_at", nullable = false, updatable = false)

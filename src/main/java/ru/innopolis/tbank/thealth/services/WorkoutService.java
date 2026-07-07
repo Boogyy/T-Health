@@ -6,12 +6,15 @@ import ru.innopolis.tbank.thealth.dto.request.WorkoutCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutUpdateRequest;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
 import ru.innopolis.tbank.thealth.dto.response.WorkoutResponse;
+import ru.innopolis.tbank.thealth.entities.PostEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.entities.WorkoutEntity;
 import ru.innopolis.tbank.thealth.enums.WorkoutType;
+import ru.innopolis.tbank.thealth.exceptions.ConflictException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
 import ru.innopolis.tbank.thealth.exceptions.WorkoutNotFoundException;
 import ru.innopolis.tbank.thealth.mappers.WorkoutMapper;
+import ru.innopolis.tbank.thealth.repositories.PostRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
 
@@ -26,15 +29,18 @@ public class WorkoutService {
     private final WorkoutRepository workoutRepository;
     private final AchievementService achievementService;
     private final WorkoutMapper workoutMapper;
+    private final PostRepository postRepository;
 
     public WorkoutService(UserRepository userRepository,
                           WorkoutRepository workoutRepository,
                           AchievementService achievementService,
-                          WorkoutMapper workoutMapper) {
+                          WorkoutMapper workoutMapper,
+                          PostRepository postRepository) {
         this.userRepository = userRepository;
         this.workoutRepository = workoutRepository;
         this.achievementService = achievementService;
         this.workoutMapper = workoutMapper;
+        this.postRepository = postRepository;
     }
 
     @Transactional
@@ -42,29 +48,47 @@ public class WorkoutService {
             WorkoutCreateRequest workoutToCreate,
             UUID userId
     ) {
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new UserNotFoundException(userId));
+        WorkoutEntity savedEntity = createWorkoutEntity(workoutToCreate, userId);
+        return workoutMapper.toWorkoutResponse(savedEntity);
+    }
 
+    @Transactional
+    public WorkoutEntity createWorkoutEntity(
+            WorkoutCreateRequest request,
+            UUID userId
+    ) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
 
         WorkoutEntity workoutToSave = new WorkoutEntity();
-        workoutToSave.setTitle(workoutToCreate.title());
-        workoutToSave.setType(workoutToCreate.type());
-        workoutToSave.setDescription(workoutToCreate.description());
-        workoutToSave.setDurationMinutes(workoutToCreate.durationMinutes());
-        workoutToSave.setCaloriesBurned(workoutToCreate.caloriesBurned());
+        workoutToSave.setTitle(request.title());
+        workoutToSave.setType(request.type());
+        workoutToSave.setDescription(request.description());
+        workoutToSave.setDurationMinutes(request.durationMinutes());
+        workoutToSave.setCaloriesBurned(request.caloriesBurned());
         workoutToSave.setUser(user);
 
         WorkoutEntity savedEntity = workoutRepository.save(workoutToSave);
 
         grantWorkoutAchievements(userId, savedEntity);
 
-        return workoutMapper.toWorkoutResponse(savedEntity);
+        return savedEntity;
     }
 
     @Transactional
-    public void deleteWorkout(UUID workoutId, UUID userId) {
+    public void deleteWorkout(UUID workoutId, UUID userId, boolean deleteRelatedPost) {
         WorkoutEntity workout = findOwnedWorkout(workoutId, userId);
+
+        Optional<PostEntity> relatedPost = postRepository.findByWorkout_Id(workoutId);
+
+        if (relatedPost.isPresent() && !deleteRelatedPost) {
+            throw new ConflictException(
+                    "Workout is published. Confirm deletion to remove related post."
+            );
+        }
+
+        relatedPost.ifPresent(postRepository::delete);
+
         workoutRepository.delete(workout);
     }
 

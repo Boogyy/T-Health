@@ -1,6 +1,5 @@
 package ru.innopolis.tbank.thealth.services;
 
-import jakarta.validation.Valid;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +28,8 @@ public class PostService {
     private final PostRepository postRepository;
     private final RecipeRepository recipeRepository;
     private final PostMapper postMapper;
+    private final WorkoutService workoutService;
+    private final RecipeService recipeService;
 
     public PostService(
             UserAchievementRepository userAchievementRepository,
@@ -36,7 +37,9 @@ public class PostService {
             WorkoutRepository workoutRepository,
             PostRepository postRepository,
             RecipeRepository recipeRepository,
-            PostMapper postMapper
+            PostMapper postMapper,
+            WorkoutService workoutService,
+            RecipeService recipeService
     ) {
         this.userAchievementRepository = userAchievementRepository;
         this.userRepository = userRepository;
@@ -44,6 +47,8 @@ public class PostService {
         this.postRepository = postRepository;
         this.recipeRepository = recipeRepository;
         this.postMapper = postMapper;
+        this.workoutService = workoutService;
+        this.recipeService = recipeService;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +100,7 @@ public class PostService {
         postToSave.setUser(user);
         postToSave.setUserAchievement(userAchievement);
         postToSave.setPostType(PostType.ACHIEVEMENT);
+        postToSave.setVisibility(PostVisibility.PUBLIC);
         postToSave.setTitle(request.postTitle());
 
         PostEntity savedPost = postRepository.save(postToSave);
@@ -142,20 +148,10 @@ public class PostService {
             RecipePostCreateRequest recipePostCreateRequest
     ) {
         UserEntity user = checkUser(jwt);
-        RecipeEntity recipeToSave = new RecipeEntity();
-
-        recipeToSave.setUser(user);
-        recipeToSave.setTitle(recipePostCreateRequest.recipe().title());
-        recipeToSave.setDescription(recipePostCreateRequest.recipe().description());
-        recipeToSave.setIngredients(recipePostCreateRequest.recipe().ingredients());
-        recipeToSave.setCookingSteps(recipePostCreateRequest.recipe().cookingSteps());
-        recipeToSave.setCalories(recipePostCreateRequest.recipe().calories());
-        recipeToSave.setProteins(recipePostCreateRequest.recipe().proteins());
-        recipeToSave.setFats(recipePostCreateRequest.recipe().fats());
-        recipeToSave.setCarbohydrates(recipePostCreateRequest.recipe().carbohydrates());
-        recipeToSave.setImageUrl(recipePostCreateRequest.recipe().imageUrl());
-
-        RecipeEntity savedRecipe = recipeRepository.save(recipeToSave);
+        RecipeEntity savedRecipe = recipeService.createRecipeEntity(
+                recipePostCreateRequest.recipe(),
+                user.getKeycloakId()
+        );
 
         PostEntity postToSave = createFromRecipe(user, savedRecipe, recipePostCreateRequest.post().postTitle());
 
@@ -170,16 +166,10 @@ public class PostService {
     ) {
         UserEntity user = checkUser(jwt);
 
-        WorkoutEntity workout = new WorkoutEntity();
-
-        workout.setUser(user);
-        workout.setTitle(workoutPostCreateRequest.workout().title());
-        workout.setType(workoutPostCreateRequest.workout().type());
-        workout.setDescription(workoutPostCreateRequest.workout().description());
-        workout.setDurationMinutes(workoutPostCreateRequest.workout().durationMinutes());
-        workout.setCaloriesBurned(workoutPostCreateRequest.workout().caloriesBurned());
-
-        WorkoutEntity savedWorkout = workoutRepository.save(workout);
+        WorkoutEntity savedWorkout = workoutService.createWorkoutEntity(
+                workoutPostCreateRequest.workout(),
+                user.getKeycloakId()
+        );
 
         PostEntity postEntity = createFromWorkout(user, savedWorkout, workoutPostCreateRequest.post().postTitle());
         PostEntity savedPost = postRepository.save(postEntity);
@@ -197,10 +187,27 @@ public class PostService {
         PostEntity entityToSave = new PostEntity();
         entityToSave.setUser(user);
         entityToSave.setPostType(PostType.TEXT);
+        entityToSave.setVisibility(PostVisibility.PUBLIC);
         entityToSave.setTitle(textPostCreateRequest.post().postTitle());
         entityToSave.setContent(textPostCreateRequest.content());
 
         return postMapper.toPostResponse(postRepository.save(entityToSave));
+    }
+
+    @Transactional
+    public void deletePostById(Jwt jwt, UUID postId) {
+        UUID userID = getKeycloakId(jwt);
+        PostEntity postToDelete = postRepository.findByIdAndUser_KeycloakId(postId, userID)
+                .orElseThrow(() -> new PostNotFoundException(postId));
+        postRepository.delete(postToDelete);
+    }
+
+    @Transactional(readOnly = true)
+    public PostResponse getPostById(UUID postId) {
+        PostEntity post = postRepository.findByIdAndVisibility(postId, PostVisibility.PUBLIC)
+                .orElseThrow(() -> new PostNotFoundException(postId));
+
+        return postMapper.toPostResponse(post);
     }
 
 
@@ -216,9 +223,6 @@ public class PostService {
                 .orElseThrow(() -> new UserNotFoundException(getKeycloakId(jwt)));
     }
 
-
-
-
     private PostEntity createFromWorkout(
             UserEntity user,
             WorkoutEntity workout,
@@ -228,6 +232,7 @@ public class PostService {
         postEntity.setUser(user);
         postEntity.setWorkout(workout);
         postEntity.setPostType(PostType.WORKOUT);
+        postEntity.setVisibility(PostVisibility.PUBLIC);
         postEntity.setTitle(title);
         return postEntity;
     }
@@ -241,7 +246,10 @@ public class PostService {
         postEntity.setUser(user);
         postEntity.setRecipe(recipe);
         postEntity.setPostType(PostType.RECIPE);
+        postEntity.setVisibility(PostVisibility.PUBLIC);
         postEntity.setTitle(title);
         return postEntity;
     }
+
+
 }

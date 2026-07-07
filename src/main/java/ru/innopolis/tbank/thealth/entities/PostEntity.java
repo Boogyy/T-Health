@@ -50,7 +50,7 @@ public class PostEntity {
     @Column(name = "title", nullable = false, length = 128)
     private String title;
 
-    @Column(name = "content", length = 2024)
+    @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "created_at", nullable = false, updatable = false)

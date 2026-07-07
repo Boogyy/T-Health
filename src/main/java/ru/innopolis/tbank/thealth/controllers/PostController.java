@@ -41,6 +41,14 @@ public class PostController {
         return ResponseEntity.status(HttpStatus.OK).body(res);
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<PostResponse> getPostById(
+            @PathVariable("id") UUID id
+    ) {
+        PostResponse response = postService.getPostById(id);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/achievements/{id}/share")
     public ResponseEntity<PostResponse> postAchievement(
             @PathVariable("id") UUID id,
@@ -101,6 +109,16 @@ public class PostController {
     ) {
         var res = postService.createTextPost(jwt, textPostCreateRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
+
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePost(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable("id") UUID postId
+    ) {
+        postService.deletePostById(jwt, postId);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
 
     }
 }

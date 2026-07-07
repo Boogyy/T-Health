@@ -1,17 +1,23 @@
 # T-Health frontend
 
-Отдельный frontend-проект на Vite. Внешний вид и текущая функциональность сохранены:
+Отдельный frontend-проект на Vite под текущие backend endpoint'ы T-Health.
 
-- регистрация через Keycloak;
-- вход через Keycloak;
+Реализовано:
+
+- регистрация и вход через Keycloak;
 - callback с обменом authorization code на token через PKCE;
-- вызов `GET /api/users/me` после входа/регистрации, чтобы backend создал локального пользователя;
+- вызов `GET /api/users/me` после входа/регистрации для создания/получения локального пользователя;
 - профиль пользователя;
-- списки тренировок и приемов пищи;
-- меню достижений в профиле и отдельная страница достижений;
-- анимация получения достижений, которые реально пришли от backend;
-- создание, просмотр, редактирование и удаление тренировок/приемов пищи;
-- заглушка будущей ленты постов и заглушка кнопки «Поделиться».
+- личные тренировки;
+- личные `food_entries` с дневником КБЖУ по выбранной дате;
+- отдельные рецепты, которыми можно делиться в ленте;
+- достижения пользователя и анимация новых достижений;
+- публичная лента постов;
+- фильтрация ленты через выпадающее меню с выбором одного или нескольких типов `TEXT`, `WORKOUT`, `RECIPE`, `ACHIEVEMENT`;
+- создание текстового поста;
+- создание поста-тренировки;
+- создание поста-рецепта;
+- публикация существующей тренировки, рецепта или достижения через кнопку `Поделиться`.
 
 ## Запуск
 
@@ -38,33 +44,15 @@ Keycloak по умолчанию ожидается здесь:
 http://localhost:8180/
 ```
 
-## Как frontend ходит в backend
-
-В коде API вызывается как текущий origin + `/api/**`.
-
-В dev-режиме браузер делает запросы на:
-
-```text
-http://localhost:5173/api/...
-```
-
-А Vite проксирует их в backend:
-
-```text
-http://localhost:8089/api/...
-```
-
-Поэтому CORS для backend API в dev-режиме обычно не нужен.
-
 ## Настройки
 
-Скопируйте `.env.example` в `.env`, если нужно поменять порты:
+Скопируйте `.env.example` в `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Основные переменные:
+Базовые значения:
 
 ```env
 VITE_BACKEND_URL=http://localhost:8089
@@ -73,11 +61,25 @@ VITE_KEYCLOAK_REALM=t-health
 VITE_KEYCLOAK_CLIENT_ID=t-health-frontend
 ```
 
-`VITE_API_BASE_URL` лучше оставить пустым. Тогда работает same-origin режим через Vite proxy.
+`VITE_BACKEND_URL` используется в `vite.config.js` для proxy. В коде frontend API вызывается через текущий origin + `/api/**`.
+
+В dev-режиме браузер обращается к:
+
+```text
+http://localhost:5173/api/...
+```
+
+а Vite проксирует запросы в backend:
+
+```text
+http://localhost:8089/api/...
+```
+
+Поэтому CORS для backend API в dev-режиме обычно не нужен.
 
 ## Keycloak
 
-Для клиента `t-health-frontend` добавьте:
+Для клиента `t-health-frontend` должны быть разрешены:
 
 ```text
 Valid redirect URIs: http://localhost:5173/*
@@ -85,53 +87,70 @@ Valid post logout redirect URIs: http://localhost:5173/*
 Web origins: http://localhost:5173
 ```
 
-Можно использовать `+` для post logout redirect/web origins, если это допустимо в вашей конфигурации.
+## Используемые backend endpoint'ы
 
-
-## Достижения
-
-Frontend получает достижения из backend endpoint:
+Профиль и auth flow:
 
 ```text
+GET /api/users/me
 GET /api/users/me/achievements
 ```
 
-Локальные демо-достижения больше не добавляются. Frontend не создает `Первый шаг в Т-Здоровье` и не дублирует backend-логику.
-
-Сценарий работает так:
-
-1. Пользователь нажимает `Register`.
-2. После Keycloak callback frontend вызывает `GET /api/users/me`, чтобы backend создал локального пользователя.
-3. Frontend запрашивает `GET /api/users/me/achievements`.
-4. Если backend вернул одно или несколько новых достижений, например `Первая тренировка` и `Сжигатель ккал`, frontend показывает их по очереди в одном сценарии анимации.
-5. После создания тренировки или приема пищи frontend заново запрашивает достижения и анимирует только те, которых не было до действия.
-6. Кнопка `Принять` показывает следующее новое достижение, если их несколько; после последнего закрывает окно и возвращает пользователя в профиль.
-7. Кнопка `Поделиться` пока показывает заглушку, потому что публикация в ленту будет подключаться позже.
-
-В профиле добавлена третья карточка рядом с тренировками и питанием:
+Тренировки:
 
 ```text
-Все достижения
+GET    /api/workouts
+POST   /api/workouts
+GET    /api/workouts/{id}
+PATCH  /api/workouts/{id}
+DELETE /api/workouts/{id}
 ```
 
-Она ведет на страницу:
+Food entries:
 
 ```text
-#/achievements
+GET    /api/food-entries
+GET    /api/food-entries/daily?date=YYYY-MM-DD
+POST   /api/food-entries
+GET    /api/food-entries/{id}
+PATCH  /api/food-entries/{id}
+DELETE /api/food-entries/{id}
 ```
 
-Кнопка `Показать анимацию` убрана из общего списка достижений и доступна только на странице конкретного достижения: `#/achievements/{id}`. Локальные бейджи не создаются.
-
-## Production-сборка
-
-```bash
-npm run build
-```
-
-Готовая статика появится в папке:
+Рецепты:
 
 ```text
-dist/
+GET    /api/recipes
+POST   /api/recipes
+GET    /api/recipes/{id}
+PATCH  /api/recipes/{id}
+DELETE /api/recipes/{id}
 ```
 
-Для production лучше отдавать `dist/` через nginx/CDN, а `/api/**` проксировать на backend.
+Посты:
+
+```text
+GET  /api/posts/feed
+GET  /api/posts/feed?type=TEXT
+GET  /api/posts/feed?type=WORKOUT
+GET  /api/posts/feed?type=RECIPE
+GET  /api/posts/feed?type=ACHIEVEMENT
+
+При выборе нескольких типов frontend делает несколько запросов с одиночным `type`, объединяет результаты и сортирует их по дате создания.
+POST /api/posts/text
+POST /api/posts/workouts
+POST /api/posts/recipes
+POST /api/posts/workouts/{id}/share
+POST /api/posts/recipes/{id}/share
+POST /api/posts/achievements/{id}/share
+```
+
+## Важная логика
+
+`food_entries` остаются личным дневником КБЖУ и не публикуются в ленте.
+
+`recipes` являются отдельным разделом: их можно хранить в профиле и публиковать в ленте.
+
+Кнопка `Поделиться` есть у тренировок, рецептов и достижений. У `food_entries` такой кнопки нет.
+
+Если backend выдает несколько новых достижений за одно действие, frontend показывает анимации последовательно.

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("api/recipe")
+@RequestMapping("/api/recipes")
 public class RecipeController {
 
     private final RecipeService recipeService;
@@ -64,10 +64,11 @@ public class RecipeController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteRecipe(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable("id") UUID id
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean deleteRelatedPost
     ) {
-        recipeService.deleteById(jwt, id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        recipeService.deleteById(jwt, id, deleteRelatedPost);
+        return ResponseEntity.noContent().build();
     }
 
 }
