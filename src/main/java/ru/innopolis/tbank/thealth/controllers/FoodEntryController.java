@@ -131,15 +131,21 @@ public class FoodEntryController {
         foodEntryService.deleteFoodEntry(foodEntryId, userId);
         return ResponseEntity.noContent().build();
     }
-
+    @Operation(summary = "Получить записи питания за день")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Записи питания за день получены"),
+            @ApiResponse(responseCode = "401", description = "Пользователь не авторизован",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/daily")
     public ResponseEntity<DailyFoodEntriesResponse> getDailyFoodEntries(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date
     ) {
-        DailyFoodEntriesResponse response = foodEntryService.getDaily(jwt, date);
+        DailyFoodEntriesResponse response = foodEntryService.getDailyFoodEntries(jwt, date);
         return ResponseEntity.ok(response);
-
     }
 
     private UUID getUserId(Jwt jwt) {

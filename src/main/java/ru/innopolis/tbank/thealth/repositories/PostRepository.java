@@ -18,6 +18,8 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
 
     List<PostEntity> findAllByUser_KeycloakIdAndPostTypeOrderByCreatedAtDesc(UUID userId, PostType type);
 
+    List<PostEntity> findAllByCommunity_IdOrderByCreatedAtDesc(UUID communityId);
+
     boolean existsByWorkout_Id(UUID workoutId);
 
     boolean existsByRecipe_Id(UUID recipeId);
@@ -26,4 +28,5 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
 
     void deleteAllByUser_KeycloakId(UUID keycloakId);
 
+    void deleteAllByCommunity_Id(UUID communityId);
 }
