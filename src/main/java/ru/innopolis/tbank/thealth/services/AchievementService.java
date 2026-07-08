@@ -9,6 +9,7 @@ import ru.innopolis.tbank.thealth.entities.UserAchievementEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.exceptions.AchievementNotFoundException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
+import ru.innopolis.tbank.thealth.mappers.AchievementMapper;
 import ru.innopolis.tbank.thealth.repositories.AchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
@@ -22,20 +23,23 @@ public class AchievementService {
     private final AchievementRepository achievementRepository;
     private final UserAchievementRepository userAchievementRepository;
     private final UserRepository userRepository;
+    private final AchievementMapper achievementMapper;
 
     public AchievementService(AchievementRepository achievementRepository,
                               UserAchievementRepository userAchievementRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              AchievementMapper achievementMapper) {
         this.achievementRepository = achievementRepository;
         this.userAchievementRepository = userAchievementRepository;
         this.userRepository = userRepository;
+        this.achievementMapper = achievementMapper;
     }
 
     @Transactional(readOnly = true)
     public List<AchievementResponse> getAllAchievements() {
         return achievementRepository.findAll()
                 .stream()
-                .map(this::toAchievementResponse)
+                .map(achievementMapper::toAchievementResponse)
                 .toList();
     }
 
@@ -43,7 +47,7 @@ public class AchievementService {
     public List<UserAchievementResponse> getCurrentUserAchievements(UUID userId) {
         return userAchievementRepository.findAllByUser_KeycloakIdOrderByReceivedAtDesc(userId)
                 .stream()
-                .map(this::toUserAchievementResponse)
+                .map(achievementMapper::toUserAchievementResponse)
                 .toList();
     }
 
@@ -85,22 +89,5 @@ public class AchievementService {
         userAchievementRepository.save(userAchievement);
     }
 
-    private AchievementResponse toAchievementResponse(AchievementEntity achievement) {
-        return new AchievementResponse(
-                achievement.getId(),
-                achievement.getCode(),
-                achievement.getTitle(),
-                achievement.getDescription(),
-                achievement.getCreatedAt()
-        );
-    }
 
-    private UserAchievementResponse toUserAchievementResponse(UserAchievementEntity userAchievement) {
-        return new UserAchievementResponse(
-                userAchievement.getId(),
-                userAchievement.getUser().getKeycloakId(),
-                toAchievementResponse(userAchievement.getAchievement()),
-                userAchievement.getReceivedAt()
-        );
-    }
 }

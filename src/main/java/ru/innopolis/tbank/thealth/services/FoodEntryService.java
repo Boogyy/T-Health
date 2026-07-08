@@ -1,9 +1,11 @@
 package ru.innopolis.tbank.thealth.services;
 
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.FoodEntryCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.FoodEntryUpdateRequest;
+import ru.innopolis.tbank.thealth.dto.response.DailyFoodEntriesResponse;
 import ru.innopolis.tbank.thealth.dto.response.FoodEntryResponse;
 import ru.innopolis.tbank.thealth.entities.FoodEntryEntity;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
@@ -12,6 +14,9 @@ import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
 import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -106,6 +111,56 @@ public class FoodEntryService {
         foodEntryRepository.delete(foodEntry);
     }
 
+    @Transactional(readOnly = true)
+    public DailyFoodEntriesResponse getDailyFoodEntries(Jwt jwt, LocalDate date) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+
+        LocalDate selectedDate = date == null ? LocalDate.now() : date;
+
+        LocalDateTime start = selectedDate.atStartOfDay();
+        LocalDateTime end = start.plusDays(1);
+
+        List<FoodEntryEntity> entries = foodEntryRepository
+                .findAllByUser_KeycloakIdAndMealDateGreaterThanEqualAndMealDateLessThanOrderByMealDateAsc(
+                        userId,
+                        start,
+                        end
+                );
+
+        Integer totalCalories = entries.stream()
+                .map(FoodEntryEntity::getCalories)
+                .filter(value -> value != null)
+                .reduce(0, Integer::sum);
+
+        BigDecimal totalProteins = entries.stream()
+                .map(FoodEntryEntity::getProteins)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalFats = entries.stream()
+                .map(FoodEntryEntity::getFats)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalCarbohydrates = entries.stream()
+                .map(FoodEntryEntity::getCarbohydrates)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<FoodEntryResponse> responses = entries.stream()
+                .map(this::toResponse)
+                .toList();
+
+        return new DailyFoodEntriesResponse(
+                selectedDate,
+                totalCalories,
+                totalProteins,
+                totalFats,
+                totalCarbohydrates,
+                responses
+        );
+    }
+
     private FoodEntryEntity findOwnedFoodEntry(UUID foodEntryId, UUID userId) {
         return foodEntryRepository.findByIdAndUser_KeycloakId(foodEntryId, userId)
                 .orElseThrow(() -> new FoodEntryNotFoundException(foodEntryId));
@@ -137,4 +192,6 @@ public class FoodEntryService {
                 foodEntry.getUpdatedAt()
         );
     }
+
+
 }

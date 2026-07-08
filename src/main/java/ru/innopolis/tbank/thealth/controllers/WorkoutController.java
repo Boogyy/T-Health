@@ -169,11 +169,12 @@ public class WorkoutController {
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteWorkout(
-            @PathVariable("id") UUID workoutId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean deleteRelatedPost
     ) {
-        UUID userId = getUserId(jwt);
-        workoutService.deleteWorkout(workoutId, userId);
+        UUID userId = UUID.fromString(jwt.getSubject());
+        workoutService.deleteWorkout(id, userId, deleteRelatedPost);
         return ResponseEntity.noContent().build();
     }
 

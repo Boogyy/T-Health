@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,10 +16,12 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import ru.innopolis.tbank.thealth.dto.request.FoodEntryCreateRequest;
 import ru.innopolis.tbank.thealth.dto.request.FoodEntryUpdateRequest;
+import ru.innopolis.tbank.thealth.dto.response.DailyFoodEntriesResponse;
 import ru.innopolis.tbank.thealth.dto.response.ErrorResponse;
 import ru.innopolis.tbank.thealth.dto.response.FoodEntryResponse;
 import ru.innopolis.tbank.thealth.services.FoodEntryService;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -127,6 +130,16 @@ public class FoodEntryController {
         UUID userId = getUserId(jwt);
         foodEntryService.deleteFoodEntry(foodEntryId, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/daily")
+    public ResponseEntity<DailyFoodEntriesResponse> getDailyFoodEntries(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        DailyFoodEntriesResponse response = foodEntryService.getDailyFoodEntries(jwt, date);
+        return ResponseEntity.ok(response);
+
     }
 
     private UUID getUserId(Jwt jwt) {

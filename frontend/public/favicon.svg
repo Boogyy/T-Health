@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Т-Здоровье">
+  <rect width="64" height="64" rx="18" fill="#FFDD2D"/>
+  <path d="M16 14h32v19c0 12-8 18-16 21-8-3-16-9-16-21V14z" fill="#333333"/>
+  <path d="M22 23h20v6h-7v17h-6V29h-7z" fill="#FFDD2D"/>
+</svg>
