@@ -45,8 +45,27 @@ import './styles.css';
     recipes: null,
     feedPosts: null,
     feedTypes: readInitialFeedTypes(),
+
+    communities: null,
+    myCommunities: null,
+    communityDetails: {},
+    communityMembers: {},
+    communityPosts: {},
+    postComments: {},
+
+    chats: null,
+    chatMessages: {},
+
     loading: false,
     feedLoading: false,
+
+    communitiesLoading: false,
+    communityLoadingIds: new Set(),
+    commentLoadingIds: new Set(),
+
+    chatsLoading: false,
+    chatLoadingIds: new Set(),
+
     error: null,
     flash: null,
     achievementModal: null,
@@ -435,10 +454,184 @@ import './styles.css';
     }
   }
 
+  async function loadCommunities(force = false) {
+    if (state.communitiesLoading) return;
+    if (state.communities && state.myCommunities && !force) return;
+
+    state.communitiesLoading = true;
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const [user, communities, myCommunities] = await Promise.all([
+        getCurrentUser(),
+        apiFetch('/api/communities'),
+        apiFetch('/api/communities/me'),
+      ]);
+
+      state.user = user;
+
+      state.communities = sortByDate(
+        Array.isArray(communities) ? communities : [],
+        'createdAt'
+      );
+
+      state.myCommunities = sortByDate(
+        Array.isArray(myCommunities) ? myCommunities : [],
+        'createdAt'
+      );
+
+      state.communities.forEach((community) => {
+        state.communityDetails[String(community.id)] = community;
+      });
+
+      state.myCommunities.forEach((community) => {
+        state.communityDetails[String(community.id)] = community;
+      });
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        navigate('/login');
+        return;
+      }
+
+      state.error = friendlyError(error);
+    } finally {
+      state.communitiesLoading = false;
+      renderRoute(false);
+    }
+  }
+
+  async function loadCommunity(communityId, force = false) {
+    const id = String(communityId);
+
+    const hasData =
+      state.communityDetails[id] &&
+      state.communityMembers[id] &&
+      state.communityPosts[id];
+
+    if (hasData && !force) return;
+    if (state.communityLoadingIds.has(id)) return;
+
+    state.communityLoadingIds.add(id);
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const [user, community, members, posts] = await Promise.all([
+        getCurrentUser(),
+        apiFetch(`/api/communities/${encodeURIComponent(id)}`),
+        apiFetch(`/api/communities/${encodeURIComponent(id)}/members`),
+        apiFetch(`/api/communities/${encodeURIComponent(id)}/posts`),
+      ]);
+
+      state.user = user;
+      state.communityDetails[id] = community;
+      state.communityMembers[id] = Array.isArray(members) ? members : [];
+
+      state.communityPosts[id] = sortByDate(
+        Array.isArray(posts) ? posts : [],
+        'createdAt'
+      );
+
+      upsertCommunityCollections(community);
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        navigate('/login');
+        return;
+      }
+
+      state.error = friendlyError(error);
+    } finally {
+      state.communityLoadingIds.delete(id);
+      renderRoute(false);
+    }
+  }
+
+  async function loadComments(postId, force = false) {
+    const id = String(postId);
+
+    if (state.postComments[id] && !force) return;
+    if (state.commentLoadingIds.has(id)) return;
+
+    state.commentLoadingIds.add(id);
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const comments = await apiFetch(
+        `/api/posts/${encodeURIComponent(id)}/comments`
+      );
+
+      state.postComments[id] = Array.isArray(comments) ? comments : [];
+    } catch (error) {
+      state.error = friendlyError(error);
+    } finally {
+      state.commentLoadingIds.delete(id);
+      renderRoute(false);
+    }
+  }
+
+  async function loadChats(force = false) {
+    if (state.chatsLoading) return;
+    if (state.chats && !force) return;
+
+    state.chatsLoading = true;
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const [user, chats] = await Promise.all([
+        getCurrentUser(),
+        apiFetch('/api/direct-chats'),
+      ]);
+
+      state.user = user;
+      state.chats = sortChats(Array.isArray(chats) ? chats : []);
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        navigate('/login');
+        return;
+      }
+
+      state.error = friendlyError(error);
+    } finally {
+      state.chatsLoading = false;
+      renderRoute(false);
+    }
+  }
+
+  async function loadChatMessages(chatId, force = false) {
+    const id = String(chatId);
+
+    if (state.chatMessages[id] && !force) return;
+    if (state.chatLoadingIds.has(id)) return;
+
+    state.chatLoadingIds.add(id);
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const messages = await apiFetch(
+        `/api/direct-chats/${encodeURIComponent(id)}/messages`
+      );
+
+      state.chatMessages[id] = sortByDateAscending(
+        Array.isArray(messages) ? messages : [],
+        'sentAt'
+      );
+    } catch (error) {
+      state.error = friendlyError(error);
+    } finally {
+      state.chatLoadingIds.delete(id);
+      renderRoute(false);
+    }
+  }
+
   function clearAuthData() {
     localStorage.removeItem(STORAGE.token);
     localStorage.removeItem(STORAGE.pkce);
     localStorage.removeItem(STORAGE.authMode);
+
     state.user = null;
     state.workouts = null;
     state.foodEntries = null;
@@ -446,6 +639,16 @@ import './styles.css';
     state.achievements = null;
     state.recipes = null;
     state.feedPosts = null;
+
+    state.communities = null;
+    state.myCommunities = null;
+    state.communityDetails = {};
+    state.communityMembers = {};
+    state.communityPosts = {};
+    state.postComments = {};
+
+    state.chats = null;
+    state.chatMessages = {};
   }
 
   function logout() {
@@ -528,6 +731,53 @@ import './styles.css';
       return;
     }
 
+    if (parts[0] === 'communities') {
+      renderProtected(renderCommunitiesRoute(parts));
+
+      if (!parts[1] && (!state.communities || !state.myCommunities)) {
+        loadCommunities();
+      }
+
+      if (parts[1] && parts[1] !== 'new') {
+        const communityId = parts[1];
+
+        const communityNotLoaded =
+          !state.communityDetails[communityId] ||
+          !state.communityMembers[communityId] ||
+          !state.communityPosts[communityId];
+
+        if (communityNotLoaded) {
+          loadCommunity(communityId);
+        } else if (
+          parts[2] === 'posts' &&
+          parts[3] &&
+          parts[3] !== 'new' &&
+          state.communityDetails[communityId]?.currentUserMember &&
+          !state.postComments[parts[3]]
+        ) {
+          loadComments(parts[3]);
+        }
+      }
+      return;
+    }
+
+    if (parts[0] === 'chats') {
+      renderProtected(renderChatsRoute(parts));
+
+      if (!state.chats && parts[1] !== 'new') {
+        loadChats();
+      }
+
+      if (
+        parts[1] &&
+        parts[1] !== 'new' &&
+        !state.chatMessages[parts[1]]
+      ) {
+        loadChatMessages(parts[1]);
+      }
+      return;
+    }
+
     renderProtected(renderNotFound());
   }
 
@@ -602,6 +852,8 @@ import './styles.css';
           <nav class="nav" aria-label="Основная навигация">
             ${navLink('/profile', 'Профиль', route)}
             ${navLink('/feed', 'Лента', route)}
+            ${navLink('/communities', 'Сообщества', route)}
+            ${navLink('/chats', 'Чаты', route)}
             ${navLink('/workouts', 'Тренировки', route)}
             ${navLink('/food', 'КБЖУ', route)}
             ${navLink('/recipes', 'Рецепты', route)}
@@ -1353,6 +1605,1314 @@ import './styles.css';
     return many;
   }
 
+  function renderCommunitiesRoute(parts) {
+    if (parts[1] === 'new') {
+      return renderCommunityForm();
+    }
+
+    if (!parts[1]) {
+      if (state.error) {
+        return (
+          pageHeader('Сообщества', 'Не удалось получить данные.') +
+          alertHtml('error', state.error)
+        );
+      }
+
+      if (!state.communities || !state.myCommunities) {
+        return (
+          pageHeader('Сообщества', 'Загружаем список сообществ.') +
+          skeletonGrid()
+        );
+      }
+
+      return renderCommunitiesList();
+    }
+
+    const communityId = String(parts[1]);
+    const community = state.communityDetails[communityId];
+
+    if (state.error && !community) {
+      return (
+        pageHeader('Сообщество', 'Не удалось получить данные.') +
+        alertHtml('error', state.error)
+      );
+    }
+
+    if (
+      !community ||
+      !state.communityMembers[communityId] ||
+      !state.communityPosts[communityId]
+    ) {
+      return (
+        pageHeader(
+          'Сообщество',
+          'Загружаем участников и публикации.'
+        ) + skeletonGrid()
+      );
+    }
+
+    if (parts[2] === 'edit') {
+      return renderCommunityForm(community);
+    }
+
+    if (parts[2] === 'posts' && parts[3] === 'new') {
+      return renderCommunityPostForm(community);
+    }
+
+    if (parts[2] === 'posts' && parts[3]) {
+      return renderCommunityPostDetails(community, parts[3]);
+    }
+
+    return renderCommunityDetails(community);
+  }
+
+  function renderCommunitiesList() {
+    const communities = state.communities || [];
+    const myCommunities = state.myCommunities || [];
+
+    return `
+      ${flashHtml()}
+
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">Общение по интересам</p>
+
+          <h1 style="font-size: clamp(38px, 5vw, 64px);">
+            Сообщества
+          </h1>
+
+          <p>
+            Находите единомышленников, публикуйте записи
+            и обсуждайте их в комментариях.
+          </p>
+        </div>
+
+        <a class="btn" href="#/communities/new">
+          Создать сообщество
+        </a>
+      </section>
+
+      <section class="community-section">
+        <div class="subsection-heading">
+          <div>
+            <h2>Мои сообщества</h2>
+
+            <p class="muted">
+              Созданные вами сообщества и те,
+              в которые вы вступили.
+            </p>
+          </div>
+
+          <span class="status-pill">
+            ${myCommunities.length}
+          </span>
+        </div>
+
+        ${
+          myCommunities.length
+            ? `
+              <div class="community-grid">
+                ${myCommunities.map(communityCard).join('')}
+              </div>
+            `
+            : emptyState(
+                'Вы пока не состоите в сообществах',
+                'Выберите сообщество ниже или создайте свое.',
+                '#/communities/new',
+                'Создать сообщество'
+              )
+        }
+      </section>
+
+      <section class="community-section">
+        <div class="subsection-heading">
+          <div>
+            <h2>Все сообщества</h2>
+
+            <p class="muted">
+              Открытый каталог сообществ Т-Здоровья.
+            </p>
+          </div>
+
+          <span class="status-pill">
+            ${communities.length}
+          </span>
+        </div>
+
+        ${
+          communities.length
+            ? `
+              <div class="community-grid">
+                ${communities.map(communityCard).join('')}
+              </div>
+            `
+            : emptyState(
+                'Сообществ пока нет',
+                'Станьте первым автором сообщества.',
+                '#/communities/new',
+                'Создать сообщество'
+              )
+        }
+      </section>
+    `;
+  }
+
+  function communityCard(community) {
+    const owner = isCommunityOwner(community);
+
+    const membership = owner
+      ? 'Владелец'
+      : community.currentUserMember
+        ? 'Участник'
+        : 'Можно вступить';
+
+    return `
+      <a
+        class="card community-card${
+          community.currentUserMember ? ' joined' : ''
+        }"
+        href="#/communities/${encodeURIComponent(community.id)}"
+      >
+        <div class="community-card-top">
+          <span class="community-icon">👥</span>
+
+          <span class="badge">
+            ${escapeHtml(membership)}
+          </span>
+        </div>
+
+        <div>
+          <h3>
+            ${escapeHtml(
+              community.communityName || 'Сообщество'
+            )}
+          </h3>
+
+          <p class="muted community-description">
+            ${escapeHtml(
+              community.description ||
+                'Описание пока не добавлено.'
+            )}
+          </p>
+        </div>
+
+        <div class="item-meta">
+          <span>
+            ${Number(community.membersCount || 0)}
+            ${plural(
+              community.membersCount || 0,
+              'участник',
+              'участника',
+              'участников'
+            )}
+          </span>
+
+          <span>
+            ${formatDateShort(community.createdAt)}
+          </span>
+        </div>
+      </a>
+    `;
+  }
+
+  function isCommunityOwner(community) {
+    return (
+      String(community?.ownerId || '') ===
+      String(state.user?.id || '')
+    );
+  }
+
+  function renderCommunityDetails(community) {
+    const id = String(community.id);
+
+    const members = state.communityMembers[id] || [];
+    const posts = state.communityPosts[id] || [];
+
+    const owner = isCommunityOwner(community);
+
+    return `
+      ${flashHtml()}
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <section class="section-header community-detail-header">
+        <div>
+          <p class="eyebrow">
+            ${
+              owner
+                ? 'Ваше сообщество'
+                : community.currentUserMember
+                  ? 'Вы участник'
+                  : 'Открытое сообщество'
+            }
+          </p>
+
+          <h1 style="font-size: clamp(36px, 5vw, 60px);">
+            ${escapeHtml(community.communityName)}
+          </h1>
+
+          <p>
+            ${escapeHtml(
+              community.description ||
+                'Описание пока не добавлено.'
+            )}
+          </p>
+        </div>
+
+        <div class="btn-row">
+          ${
+            community.currentUserMember
+              ? `
+                <a
+                  class="btn"
+                  href="#/communities/${encodeURIComponent(id)}/posts/new"
+                >
+                  Новый пост
+                </a>
+              `
+              : `
+                <button
+                  class="btn"
+                  type="button"
+                  data-join-community="${escapeHtml(id)}"
+                >
+                  Вступить
+                </button>
+              `
+          }
+
+          ${
+            owner
+              ? `
+                <a
+                  class="btn ghost"
+                  href="#/communities/${encodeURIComponent(id)}/edit"
+                >
+                  Редактировать
+                </a>
+
+                <button
+                  class="btn danger"
+                  type="button"
+                  data-delete-community="${escapeHtml(id)}"
+                >
+                  Удалить
+                </button>
+              `
+              : community.currentUserMember
+                ? `
+                  <button
+                    class="btn ghost"
+                    type="button"
+                    data-leave-community="${escapeHtml(id)}"
+                  >
+                    Выйти
+                  </button>
+                `
+                : ''
+          }
+
+          <a class="btn ghost" href="#/communities">
+            К списку
+          </a>
+        </div>
+      </section>
+
+      <section class="community-summary-grid">
+        <article class="card community-stat-card">
+          <span class="badge">Участники</span>
+
+          <span class="metric">
+            ${Number(community.membersCount || members.length)}
+          </span>
+
+          <p class="muted">
+            Людей в сообществе
+          </p>
+        </article>
+
+        <article class="card community-stat-card">
+          <span class="badge">Публикации</span>
+
+          <span class="metric">
+            ${posts.length}
+          </span>
+
+          <p class="muted">
+            Текстовых постов
+          </p>
+        </article>
+
+        <article class="card community-stat-card">
+          <span class="badge">Создано</span>
+
+          <h3>
+            ${formatDateShort(community.createdAt)}
+          </h3>
+
+          <p class="muted">
+            Последнее обновление:
+            ${formatDateShort(
+              community.updatedAt || community.createdAt
+            )}
+          </p>
+        </article>
+      </section>
+
+      <section class="community-content-grid">
+        <div>
+          <div class="subsection-heading">
+            <div>
+              <h2>Публикации</h2>
+
+              <p class="muted">
+                Обсуждения участников сообщества.
+              </p>
+            </div>
+
+            ${
+              community.currentUserMember
+                ? `
+                  <a
+                    class="btn ghost"
+                    href="#/communities/${encodeURIComponent(id)}/posts/new"
+                  >
+                    Написать
+                  </a>
+                `
+                : ''
+            }
+          </div>
+
+          ${
+            posts.length
+              ? `
+                <div class="community-post-list">
+                  ${posts
+                    .map((post) =>
+                      communityPostCard(community, post)
+                    )
+                    .join('')}
+                </div>
+              `
+              : emptyState(
+                  'Публикаций пока нет',
+                  community.currentUserMember
+                    ? 'Создайте первый пост сообщества.'
+                    : 'После вступления вы сможете создать публикацию.',
+                  community.currentUserMember
+                    ? `#/communities/${id}/posts/new`
+                    : '#/communities',
+                  community.currentUserMember
+                    ? 'Создать пост'
+                    : 'К каталогу'
+                )
+          }
+        </div>
+
+        <aside class="members-panel">
+          <div class="subsection-heading">
+            <div>
+              <h2>Участники</h2>
+
+              <p class="muted">
+                Владелец и участники сообщества.
+              </p>
+            </div>
+          </div>
+
+          <div class="member-list">
+            ${members
+              .map((member) =>
+                communityMemberRow(community, member)
+              )
+              .join('')}
+          </div>
+        </aside>
+      </section>
+    `;
+  }
+
+  function communityPostCard(community, post) {
+    const canDiscuss = community.currentUserMember;
+
+    return `
+      <article class="post-card community-post-card">
+        <div class="post-header">
+          <div>
+            <span class="badge">
+              Пост сообщества
+            </span>
+
+            <h3>
+              ${escapeHtml(
+                post.title || 'Пост без заголовка'
+              )}
+            </h3>
+
+            <p class="muted">
+              ${escapeHtml(
+                post.username || 'Пользователь'
+              )}
+              ·
+              ${formatDateTime(post.createdAt)}
+            </p>
+          </div>
+        </div>
+
+        ${
+          post.content
+            ? `
+              <p class="post-content">
+                ${escapeHtml(post.content)}
+              </p>
+            `
+            : ''
+        }
+
+        ${
+          canDiscuss
+            ? `
+              <a
+                class="btn ghost discussion-link"
+                href="#/communities/${encodeURIComponent(
+                  community.id
+                )}/posts/${encodeURIComponent(post.id)}"
+              >
+                Открыть обсуждение
+              </a>
+            `
+            : `
+              <p class="muted microcopy">
+                Вступите в сообщество, чтобы читать
+                и писать комментарии.
+              </p>
+            `
+        }
+      </article>
+    `;
+  }
+
+  function communityMemberRow(community, member) {
+    const isCurrent =
+      String(member.userId) === String(state.user?.id);
+
+    return `
+      <div class="member-row">
+        <div class="member-avatar">
+          ${escapeHtml(getMemberInitials(member))}
+        </div>
+
+        <div class="member-info">
+          <strong>
+            ${escapeHtml(
+              member.username ||
+                member.email ||
+                'Пользователь'
+            )}
+          </strong>
+
+          <span>
+            ${escapeHtml(member.email || '')}
+          </span>
+
+          <small>
+            ${communityRoleLabel(member.role)}
+            · с ${formatDateShort(member.joinedAt)}
+          </small>
+        </div>
+
+        ${
+          !isCurrent
+            ? `
+              <button
+                class="icon-btn"
+                type="button"
+                data-start-chat="${escapeHtml(member.userId)}"
+                title="Начать личный чат"
+                aria-label="Написать ${escapeHtml(
+                  member.username || 'участнику'
+                )}"
+              >
+                💬
+              </button>
+            `
+            : `
+              <span class="badge">
+                Вы
+              </span>
+            `
+        }
+      </div>
+    `;
+  }
+
+  function renderCommunityForm(community = null) {
+    const editing = Boolean(community);
+
+    const cancelHref = editing
+      ? `#/communities/${encodeURIComponent(community.id)}`
+      : '#/communities';
+
+    return `
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">
+            ${
+              editing
+                ? 'Настройки сообщества'
+                : 'Новое сообщество'
+            }
+          </p>
+
+          <h1 style="font-size: clamp(34px, 5vw, 56px);">
+            ${
+              editing
+                ? 'Редактировать сообщество'
+                : 'Создать сообщество'
+            }
+          </h1>
+
+          <p>
+            ${
+              editing
+                ? 'Измените название или описание.'
+                : 'Соберите людей вокруг общей цели, спорта или полезной привычки.'
+            }
+          </p>
+        </div>
+
+        <a class="btn ghost" href="${cancelHref}">
+          Отмена
+        </a>
+      </section>
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <form
+        id="community-form"
+        class="form-card"
+        ${editing
+          ? `data-id="${escapeHtml(community.id)}"`
+          : ''}
+      >
+        <div class="forms-grid">
+          <div class="form-field full-width">
+            <label for="community-name">
+              Название
+            </label>
+
+            <input
+              id="community-name"
+              name="communityName"
+              required
+              maxlength="64"
+              value="${escapeHtml(
+                community?.communityName || ''
+              )}"
+              placeholder="Бег по утрам"
+            />
+          </div>
+
+          <div class="form-field full-width">
+            <label for="community-description">
+              Описание
+            </label>
+
+            <textarea
+              id="community-description"
+              name="description"
+              maxlength="1024"
+              placeholder="Расскажите, кому подойдет сообщество и чем вы будете заниматься"
+            >${escapeHtml(
+              community?.description || ''
+            )}</textarea>
+          </div>
+
+          <div class="form-actions">
+            <a class="btn ghost" href="${cancelHref}">
+              Отмена
+            </a>
+
+            <button class="btn" type="submit">
+              ${editing ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderCommunityPostForm(community) {
+    if (!community.currentUserMember) {
+      return (
+        pageHeader(
+          'Новый пост',
+          'Сначала вступите в сообщество.'
+        ) +
+        emptyState(
+          'Требуется участие',
+          'Публиковать записи могут только участники сообщества.',
+          `#/communities/${community.id}`,
+          'Открыть сообщество'
+        )
+      );
+    }
+
+    return `
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">
+            ${escapeHtml(community.communityName)}
+          </p>
+
+          <h1 style="font-size: clamp(34px, 5vw, 56px);">
+            Новый пост
+          </h1>
+
+          <p>
+            Публикация будет видна участникам сообщества.
+          </p>
+        </div>
+
+        <a
+          class="btn ghost"
+          href="#/communities/${encodeURIComponent(community.id)}"
+        >
+          Отмена
+        </a>
+      </section>
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <form
+        id="community-post-form"
+        class="form-card"
+        data-community-id="${escapeHtml(community.id)}"
+      >
+        <div class="forms-grid">
+          <div class="form-field full-width">
+            <label for="community-post-title">
+              Заголовок
+            </label>
+
+            <input
+              id="community-post-title"
+              name="title"
+              required
+              maxlength="128"
+              placeholder="Кто завтра идет на пробежку?"
+            />
+          </div>
+
+          <div class="form-field full-width">
+            <label for="community-post-content">
+              Текст
+            </label>
+
+            <textarea
+              id="community-post-content"
+              name="content"
+              required
+              maxlength="2000"
+              placeholder="Расскажите подробнее"
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <a
+              class="btn ghost"
+              href="#/communities/${encodeURIComponent(community.id)}"
+            >
+              Отмена
+            </a>
+
+            <button class="btn" type="submit">
+              Опубликовать
+            </button>
+          </div>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderCommunityPostDetails(community, postId) {
+    const communityId = String(community.id);
+
+    const posts = state.communityPosts[communityId] || [];
+    const post = findById(posts, postId);
+
+    if (!post) {
+      return (
+        pageHeader(
+          'Публикация',
+          'Пост не найден.'
+        ) +
+        emptyState(
+          'Пост не найден',
+          'Вернитесь к публикациям сообщества.',
+          `#/communities/${community.id}`,
+          'К сообществу'
+        )
+      );
+    }
+
+    if (!community.currentUserMember) {
+      return (
+        pageHeader(
+          post.title || 'Публикация',
+          'Комментарии доступны участникам.'
+        ) +
+        emptyState(
+          'Вступите в сообщество',
+          'После вступления вы сможете читать обсуждение и оставлять комментарии.',
+          `#/communities/${community.id}`,
+          'Открыть сообщество'
+        )
+      );
+    }
+
+    const comments = state.postComments[String(post.id)];
+
+    return `
+      ${flashHtml()}
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">
+            ${escapeHtml(community.communityName)}
+          </p>
+
+          <h1 style="font-size: clamp(34px, 5vw, 56px);">
+            ${escapeHtml(post.title || 'Публикация')}
+          </h1>
+
+          <p>
+            ${escapeHtml(
+              post.username || 'Пользователь'
+            )}
+            ·
+            ${formatDateTime(post.createdAt)}
+          </p>
+        </div>
+
+        <a
+          class="btn ghost"
+          href="#/communities/${encodeURIComponent(community.id)}"
+        >
+          К сообществу
+        </a>
+      </section>
+
+      <article class="post-card post-detail-card">
+        <p class="post-content">
+          ${escapeHtml(post.content || '')}
+        </p>
+      </article>
+
+      <section class="comments-section">
+        <div class="subsection-heading">
+          <div>
+            <h2>Комментарии</h2>
+
+            <p class="muted">
+              Обсуждение публикации.
+            </p>
+          </div>
+
+          <span class="status-pill">
+            ${comments?.length || 0}
+          </span>
+        </div>
+
+        ${
+          comments
+            ? comments.length
+              ? `
+                <div class="comment-list">
+                  ${comments
+                    .map((comment) =>
+                      commentCard(
+                        community,
+                        post,
+                        comment
+                      )
+                    )
+                    .join('')}
+                </div>
+              `
+              : `
+                <div class="empty-comments">
+                  <strong>
+                    Комментариев пока нет
+                  </strong>
+
+                  <span>
+                    Начните обсуждение первым.
+                  </span>
+                </div>
+              `
+            : `
+              <div class="skeleton comment-skeleton"></div>
+            `
+        }
+
+        <form
+          id="comment-form"
+          class="comment-form"
+          data-post-id="${escapeHtml(post.id)}"
+        >
+          <label
+            class="sr-only"
+            for="comment-content"
+          >
+            Комментарий
+          </label>
+
+          <textarea
+            id="comment-content"
+            name="content"
+            required
+            maxlength="2000"
+            placeholder="Напишите комментарий"
+          ></textarea>
+
+          <button class="btn" type="submit">
+            Отправить
+          </button>
+        </form>
+      </section>
+    `;
+  }
+
+  function commentCard(community, post, comment) {
+    const currentUserId = String(state.user?.id || '');
+
+    const commentAuthorId = String(
+      comment.authorId || ''
+    );
+
+    const postAuthorId = String(
+      post.authorId || ''
+    );
+
+    const canDelete =
+      commentAuthorId === currentUserId ||
+      postAuthorId === currentUserId ||
+      isCommunityOwner(community);
+
+    const username =
+      comment.username || 'Пользователь';
+
+    const firstLetter =
+      username.trim().charAt(0).toUpperCase() || 'П';
+
+    return `
+      <article class="comment-card">
+        <div class="comment-avatar">
+          ${escapeHtml(firstLetter)}
+        </div>
+
+        <div class="comment-body">
+          <div class="comment-heading">
+            <strong>
+              ${escapeHtml(username)}
+            </strong>
+
+            <span>
+              ${formatDateTime(comment.createdAt)}
+            </span>
+          </div>
+
+          <p>
+            ${escapeHtml(comment.content || '')}
+          </p>
+        </div>
+
+        ${
+          canDelete
+            ? `
+              <button
+                class="icon-btn danger-icon"
+                type="button"
+                data-delete-comment="${escapeHtml(comment.id)}"
+                data-post-id="${escapeHtml(post.id)}"
+                aria-label="Удалить комментарий"
+                title="Удалить комментарий"
+              >
+                ×
+              </button>
+            `
+            : ''
+        }
+      </article>
+    `;
+  }
+
+  function renderChatsRoute(parts) {
+    if (parts[1] === 'new') {
+      return renderDirectChatForm();
+    }
+
+    if (!parts[1]) {
+      if (state.error) {
+        return (
+          pageHeader(
+            'Чаты',
+            'Не удалось получить список чатов.'
+          ) +
+          alertHtml('error', state.error)
+        );
+      }
+
+      if (!state.chats) {
+        return (
+          pageHeader(
+            'Чаты',
+            'Загружаем личные переписки.'
+          ) +
+          skeletonGrid()
+        );
+      }
+
+      return renderChatsList();
+    }
+
+    const chatId = String(parts[1]);
+
+    if (state.error && !state.chatMessages[chatId]) {
+      return (
+        pageHeader(
+          'Чат',
+          'Не удалось загрузить переписку.'
+        ) +
+        alertHtml('error', state.error) +
+        emptyState(
+          'Сообщения недоступны',
+          'Попробуйте обновить страницу или вернитесь к списку чатов.',
+          '#/chats',
+          'К списку чатов'
+        )
+      );
+    }
+
+    if (!state.chats || !state.chatMessages[chatId]) {
+      return (
+        pageHeader(
+          'Чат',
+          'Загружаем сообщения.'
+        ) +
+        `
+          <div class="chat-layout">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+        `
+      );
+    }
+
+    const chat = findById(state.chats, chatId);
+
+    if (!chat) {
+      return (
+        pageHeader(
+          'Чат',
+          'Переписка не найдена.'
+        ) +
+        emptyState(
+          'Чат не найден',
+          'Вернитесь к списку доступных переписок.',
+          '#/chats',
+          'К списку чатов'
+        )
+      );
+    }
+
+    return renderChatDetails(chatId, chat);
+  }
+
+  function renderChatsList() {
+    const chats = state.chats || [];
+
+    return `
+      ${flashHtml()}
+
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">
+            Личные сообщения
+          </p>
+
+          <h1 style="font-size: clamp(38px, 5vw, 64px);">
+            Чаты
+          </h1>
+
+          <p>
+            Переписки один на один с пользователями
+            Т-Здоровья.
+          </p>
+        </div>
+
+        <a class="btn" href="#/chats/new">
+          Новый чат
+        </a>
+      </section>
+
+      ${
+        chats.length
+          ? `
+            <div class="chat-list">
+              ${chats.map(chatListItem).join('')}
+            </div>
+          `
+          : emptyState(
+              'Личных чатов пока нет',
+              'Начните переписку по UUID пользователя или напишите участнику сообщества.',
+              '#/chats/new',
+              'Начать чат'
+            )
+      }
+    `;
+  }
+
+  function chatListItem(chat) {
+    const lastMessage = chat.lastMessage;
+
+    const companionName =
+      chat.companionUsername ||
+      chat.companionEmail ||
+      'Собеседник';
+
+    return `
+      <a
+        class="chat-list-item"
+        href="#/chats/${encodeURIComponent(chat.id)}"
+      >
+        <div class="chat-avatar">
+          ${escapeHtml(getChatInitials(chat))}
+        </div>
+
+        <div class="chat-preview">
+          <div class="chat-preview-heading">
+            <strong>
+              ${escapeHtml(companionName)}
+            </strong>
+
+            <span>
+              ${formatChatTime(
+                lastMessage?.sentAt || chat.createdAt
+              )}
+            </span>
+          </div>
+
+          <p>
+            ${escapeHtml(
+              lastMessage?.content ||
+                'Сообщений пока нет'
+            )}
+          </p>
+
+          <small>
+            ${escapeHtml(chat.companionEmail || '')}
+          </small>
+        </div>
+
+        <span class="chat-arrow" aria-hidden="true">
+          ›
+        </span>
+      </a>
+    `;
+  }
+
+  function renderDirectChatForm() {
+    return `
+      <section class="section-header">
+        <div>
+          <p class="eyebrow">
+            Новая переписка
+          </p>
+
+          <h1 style="font-size: clamp(34px, 5vw, 56px);">
+            Начать чат
+          </h1>
+
+          <p>
+            Укажите UUID пользователя. Также чат можно
+            начать кнопкой 💬 в списке участников сообщества.
+          </p>
+        </div>
+
+        <a class="btn ghost" href="#/chats">
+          Отмена
+        </a>
+      </section>
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <form
+        id="direct-chat-form"
+        class="form-card"
+      >
+        <div class="forms-grid">
+          <div class="form-field full-width">
+            <label for="recipient-id">
+              UUID собеседника
+            </label>
+
+            <input
+              id="recipient-id"
+              name="recipientId"
+              required
+              maxlength="36"
+              pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+              placeholder="ccd11ba4-3a88-42cb-82f7-19d9e4fdb478"
+            />
+          </div>
+
+          <div class="form-actions">
+            <a class="btn ghost" href="#/chats">
+              Отмена
+            </a>
+
+            <button class="btn" type="submit">
+              Открыть чат
+            </button>
+          </div>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderChatDetails(chatId, chat) {
+    const messages =
+      state.chatMessages[chatId] || [];
+
+    const companion =
+      chat?.companionUsername ||
+      chat?.companionEmail ||
+      'Собеседник';
+
+    return `
+      ${flashHtml()}
+
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <section class="chat-page-header">
+        <a
+          class="btn ghost chat-back"
+          href="#/chats"
+        >
+          ← Все чаты
+        </a>
+
+        <div class="chat-person">
+          <div class="chat-avatar">
+            ${escapeHtml(getChatInitials(chat))}
+          </div>
+
+          <div>
+            <h2>
+              ${escapeHtml(companion)}
+            </h2>
+
+            <p>
+              ${escapeHtml(
+                chat?.companionEmail || 'Личный чат'
+              )}
+            </p>
+          </div>
+        </div>
+
+        <button
+          class="btn ghost"
+          type="button"
+          data-reload
+        >
+          Обновить
+        </button>
+      </section>
+
+      <section class="chat-window">
+        <div class="messages" data-messages>
+          ${
+            messages.length
+              ? messages.map(messageBubble).join('')
+              : `
+                <div class="chat-empty">
+                  <strong>
+                    Сообщений пока нет
+                  </strong>
+
+                  <span>
+                    Поздоровайтесь с собеседником.
+                  </span>
+                </div>
+              `
+          }
+        </div>
+
+        <form
+          id="direct-message-form"
+          class="message-form"
+          data-chat-id="${escapeHtml(chatId)}"
+        >
+          <label
+            class="sr-only"
+            for="message-content"
+          >
+            Сообщение
+          </label>
+
+          <textarea
+            id="message-content"
+            name="content"
+            required
+            maxlength="2000"
+            rows="1"
+            placeholder="Напишите сообщение"
+          ></textarea>
+
+          <button class="btn" type="submit">
+            Отправить
+          </button>
+        </form>
+      </section>
+    `;
+  }
+
+  function messageBubble(message) {
+    const own =
+      String(message.senderId) ===
+      String(state.user?.id);
+
+    return `
+      <div class="message-row${own ? ' own' : ''}">
+        <article class="message-bubble">
+          <span class="message-author">
+            ${
+              own
+                ? 'Вы'
+                : escapeHtml(
+                    message.senderUsername ||
+                      'Собеседник'
+                  )
+            }
+          </span>
+
+          <p>
+            ${escapeHtml(message.content || '')}
+          </p>
+
+          <time datetime="${escapeHtml(message.sentAt || '')}">
+            ${formatChatTime(message.sentAt)}
+          </time>
+        </article>
+      </div>
+    `;
+  }
+
   function renderNotFound() {
     return pageHeader('Страница не найдена', 'Такого раздела пока нет.') + emptyState('404', 'Вернитесь в профиль или выберите раздел в меню.', '#/profile', 'В профиль');
   }
@@ -1441,6 +3001,77 @@ import './styles.css';
       });
     });
 
+    app.querySelectorAll('[data-join-community]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        await joinCommunity(
+          button.dataset.joinCommunity,
+          button
+        );
+      });
+    });
+
+    app.querySelectorAll('[data-leave-community]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (!confirm('Выйти из этого сообщества?')) {
+          return;
+        }
+
+        await leaveCommunity(
+          button.dataset.leaveCommunity,
+          button
+        );
+      });
+    });
+
+    app.querySelectorAll('[data-delete-community]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Удалить сообщество? Публикации и комментарии также станут недоступны.'
+          )
+        ) {
+          return;
+        }
+
+        await deleteCommunity(
+          button.dataset.deleteCommunity,
+          button
+        );
+      });
+    });
+
+    app.querySelectorAll('[data-delete-comment]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (!confirm('Удалить этот комментарий?')) {
+          return;
+        }
+
+        await deleteComment(
+          button.dataset.postId,
+          button.dataset.deleteComment,
+          button
+        );
+      });
+    });
+
+    app.querySelectorAll('[data-start-chat]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const recipientId = button.dataset.startChat;
+
+        try {
+          button.disabled = true;
+          state.error = null;
+
+          await startDirectChat(recipientId);
+        } catch (error) {
+          state.error = friendlyError(error);
+          renderRoute(false);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+
     app.querySelectorAll('[data-food-date-action]').forEach((button) => {
       button.addEventListener('click', () => {
         const current = parseISODate(state.foodDate);
@@ -1475,17 +3106,103 @@ import './styles.css';
   }
 
   function bindForms() {
-    const workoutForm = document.getElementById('workout-form');
-    if (workoutForm) workoutForm.addEventListener('submit', submitWorkout);
+    const workoutForm =
+      document.getElementById('workout-form');
 
-    const foodForm = document.getElementById('food-form');
-    if (foodForm) foodForm.addEventListener('submit', submitFood);
+    if (workoutForm) {
+      workoutForm.addEventListener(
+        'submit',
+        submitWorkout
+      );
+    }
 
-    const recipeForm = document.getElementById('recipe-form');
-    if (recipeForm) recipeForm.addEventListener('submit', submitRecipe);
+    const foodForm =
+      document.getElementById('food-form');
 
-    const postForm = document.getElementById('post-form');
-    if (postForm) postForm.addEventListener('submit', submitPost);
+    if (foodForm) {
+      foodForm.addEventListener(
+        'submit',
+        submitFood
+      );
+    }
+
+    const recipeForm =
+      document.getElementById('recipe-form');
+
+    if (recipeForm) {
+      recipeForm.addEventListener(
+        'submit',
+        submitRecipe
+      );
+    }
+
+    const postForm =
+      document.getElementById('post-form');
+
+    if (postForm) {
+      postForm.addEventListener(
+        'submit',
+        submitPost
+      );
+    }
+
+    const communityForm =
+      document.getElementById('community-form');
+
+    if (communityForm) {
+      communityForm.addEventListener(
+        'submit',
+        submitCommunity
+      );
+    }
+
+    const communityPostForm =
+      document.getElementById(
+        'community-post-form'
+      );
+
+    if (communityPostForm) {
+      communityPostForm.addEventListener(
+        'submit',
+        submitCommunityPost
+      );
+    }
+
+    const commentForm =
+      document.getElementById('comment-form');
+
+    if (commentForm) {
+      commentForm.addEventListener(
+        'submit',
+        submitComment
+      );
+    }
+
+    const directChatForm =
+      document.getElementById(
+        'direct-chat-form'
+      );
+
+    if (directChatForm) {
+      directChatForm.addEventListener(
+        'submit',
+        submitDirectChat
+      );
+    }
+
+    const directMessageForm =
+      document.getElementById(
+        'direct-message-form'
+      );
+
+    if (directMessageForm) {
+      directMessageForm.addEventListener(
+        'submit',
+        submitDirectMessage
+      );
+    }
+
+    scrollChatToBottom();
   }
 
   async function reloadCurrentSection() {
@@ -1496,7 +3213,263 @@ import './styles.css';
       await loadFeed(true);
       return;
     }
+
+    if (parts[0] === 'communities') {
+      if (!parts[1]) {
+        state.communities = null;
+        state.myCommunities = null;
+        await loadCommunities(true);
+        return;
+      }
+
+      if (parts[1] === 'new') {
+        renderRoute(false);
+        return;
+      }
+
+      const communityId =
+        String(parts[1]);
+      if (
+        parts[2] === 'posts' &&
+        parts[3] &&
+        parts[3] !== 'new'
+      ) {
+        await Promise.all([
+          loadCommunity(
+            communityId,
+            true
+          ),
+          loadComments(
+            parts[3],
+            true
+          ),
+        ]);
+        return;
+      }
+
+      await loadCommunity(
+        communityId,
+        true
+      );
+      return;
+    }
+
+    if (parts[0] === 'chats') {
+      if (!parts[1]) {
+        state.chats = null;
+        await loadChats(true);
+        return;
+      }
+
+      if (parts[1] === 'new') {
+        renderRoute(false);
+        return;
+      }
+      const chatId =
+        String(parts[1]);
+      await Promise.all([
+        loadChats(true),
+        loadChatMessages(
+          chatId,
+          true
+        ),
+      ]);
+      return;
+    }
+
     await loadDashboard(true);
+  }
+
+  async function joinCommunity(
+    communityId,
+    button = null
+  ) {
+    const id = String(communityId);
+
+    try {
+      if (button) {
+        button.disabled = true;
+      }
+
+      state.error = null;
+
+      const community = await apiFetch(
+        `/api/communities/${encodeURIComponent(id)}/join`,
+        {
+          method: 'POST',
+        }
+      );
+
+      state.communityDetails[id] = community;
+
+      upsertCommunityCollections(community);
+
+      state.flash =
+        'Вы вступили в сообщество.';
+
+      await loadCommunity(id, true);
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function leaveCommunity(
+    communityId,
+    button = null
+  ) {
+    const id = String(communityId);
+
+    try {
+      if (button) {
+        button.disabled = true;
+      }
+
+      state.error = null;
+
+      await apiFetch(
+        `/api/communities/${encodeURIComponent(id)}/leave`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      if (state.myCommunities) {
+        state.myCommunities =
+          state.myCommunities.filter(
+            (community) =>
+              String(community.id) !== id
+          );
+      }
+
+      state.flash =
+        'Вы вышли из сообщества.';
+
+      await loadCommunity(id, true);
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function deleteCommunity(
+    communityId,
+    button = null
+  ) {
+    const id = String(communityId);
+
+    try {
+      if (button) {
+        button.disabled = true;
+      }
+
+      state.error = null;
+
+      await apiFetch(
+        `/api/communities/${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      const deletedPosts =
+        state.communityPosts[id] || [];
+
+      deletedPosts.forEach((post) => {
+        if (!post?.id) {
+          return;
+        }
+
+        const postId = String(post.id);
+
+        delete state.postComments[postId];
+
+        state.commentLoadingIds.delete(postId);
+      });
+
+      delete state.communityDetails[id];
+      delete state.communityMembers[id];
+      delete state.communityPosts[id];
+
+      state.communityLoadingIds.delete(id);
+      state.communities = null;
+      state.myCommunities = null;
+
+      state.flash =
+        'Сообщество удалено.';
+
+      navigate('/communities');
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function deleteComment(
+    postId,
+    commentId,
+    button = null
+  ) {
+    const normalizedPostId =
+      String(postId);
+
+    const normalizedCommentId =
+      String(commentId);
+
+    try {
+      if (button) {
+        button.disabled = true;
+      }
+
+      state.error = null;
+
+      await apiFetch(
+        `/api/posts/${encodeURIComponent(
+          normalizedPostId
+        )}/comments/${encodeURIComponent(
+          normalizedCommentId
+        )}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      state.postComments[
+        normalizedPostId
+      ] = (
+        state.postComments[
+          normalizedPostId
+        ] || []
+      ).filter(
+        (comment) =>
+          String(comment.id) !==
+          normalizedCommentId
+      );
+
+      state.flash =
+        'Комментарий удалён.';
+
+      renderRoute(false);
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
   }
 
   async function deleteResource(path, message) {
@@ -1630,6 +3603,296 @@ import './styles.css';
     } finally {
       disableForm(form, false);
     }
+  }
+
+  async function submitCommunity(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const communityId = form.dataset.id;
+
+    const payload = {
+      communityName: stringValue(
+        formData.get('communityName')
+      ),
+      description: stringValue(
+        formData.get('description')
+      ),
+    };
+
+    try {
+      disableForm(form, true);
+      state.error = null;
+
+      const community = await apiFetch(
+        communityId
+          ? `/api/communities/${encodeURIComponent(
+              communityId
+            )}`
+          : '/api/communities',
+        {
+          method: communityId ? 'PATCH' : 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const id = String(community.id);
+
+      state.communityDetails[id] = community;
+
+      upsertCommunityCollections(community);
+
+      state.flash = communityId
+        ? 'Сообщество обновлено.'
+        : 'Сообщество создано.';
+
+      await loadCommunity(id, true);
+
+      navigate(`/communities/${id}`);
+    } catch (error) {
+      state.error = friendlyError(error);
+
+      renderProtected(
+        renderCommunityForm(
+          communityId
+            ? state.communityDetails[
+                String(communityId)
+              ]
+            : null
+        )
+      );
+    } finally {
+      disableForm(form, false);
+    }
+  }
+
+  async function submitCommunityPost(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const communityId =
+      form.dataset.communityId;
+
+    const payload = {
+      title: stringValue(
+        formData.get('title')
+      ),
+      content: stringValue(
+        formData.get('content')
+      ),
+    };
+
+    try {
+      disableForm(form, true);
+      state.error = null;
+
+      await apiFetch(
+        `/api/communities/${encodeURIComponent(
+          communityId
+        )}/posts/text`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
+      state.flash =
+        'Пост опубликован в сообществе.';
+
+      await loadCommunity(
+        communityId,
+        true
+      );
+
+      navigate(
+        `/communities/${communityId}`
+      );
+    } catch (error) {
+      state.error = friendlyError(error);
+
+      renderProtected(
+        renderCommunityPostForm(
+          state.communityDetails[
+            String(communityId)
+          ]
+        )
+      );
+    } finally {
+      disableForm(form, false);
+    }
+  }
+
+  async function submitComment(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const postId = form.dataset.postId;
+
+    const content = stringValue(
+      formData.get('content')
+    );
+
+    try {
+      disableForm(form, true);
+      state.error = null;
+
+      const comment = await apiFetch(
+        `/api/posts/${encodeURIComponent(
+          postId
+        )}/comments`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            content,
+          }),
+        }
+      );
+
+      state.postComments[String(postId)] = [
+        ...(
+          state.postComments[
+            String(postId)
+          ] || []
+        ),
+        comment,
+      ];
+
+      form.reset();
+
+      renderRoute(false);
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      disableForm(form, false);
+    }
+  }
+
+  async function submitDirectChat(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const recipientId = stringValue(
+      formData.get('recipientId')
+    );
+
+    try {
+      disableForm(form, true);
+      state.error = null;
+
+      await startDirectChat(recipientId);
+    } catch (error) {
+      state.error = friendlyError(error);
+
+      renderProtected(
+        renderDirectChatForm()
+      );
+    } finally {
+      disableForm(form, false);
+    }
+  }
+
+  async function submitDirectMessage(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const chatId = form.dataset.chatId;
+
+    const content = stringValue(
+      formData.get('content')
+    );
+
+    try {
+      disableForm(form, true);
+      state.error = null;
+
+      const message = await apiFetch(
+        `/api/direct-chats/${encodeURIComponent(
+          chatId
+        )}/messages`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            content,
+          }),
+        }
+      );
+
+      state.chatMessages[String(chatId)] = [
+        ...(
+          state.chatMessages[
+            String(chatId)
+          ] || []
+        ),
+        message,
+      ];
+
+      updateChatLastMessage(
+        chatId,
+        message
+      );
+
+      form.reset();
+
+      renderRoute(false);
+    } catch (error) {
+      state.error = friendlyError(error);
+      renderRoute(false);
+    } finally {
+      disableForm(form, false);
+    }
+  }
+
+  async function startDirectChat(recipientId) {
+    const normalizedRecipientId =
+      stringValue(recipientId);
+
+    if (!normalizedRecipientId) {
+      throw new Error(
+        'Укажите UUID пользователя.'
+      );
+    }
+
+    const chat = await apiFetch(
+      '/api/direct-chats',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          recipientId: normalizedRecipientId,
+        }),
+      }
+    );
+
+    state.chats = sortChats(
+      uniqueById([
+        chat,
+        ...(state.chats || []),
+      ])
+    );
+
+    state.chatMessages[String(chat.id)] =
+      state.chatMessages[String(chat.id)] ||
+      [];
+
+    state.flash = 'Личный чат открыт.';
+
+    navigate(`/chats/${chat.id}`);
+
+    await loadChatMessages(
+      chat.id,
+      true
+    );
+
+    return chat;
   }
 
   async function shareEntity(type, id) {
@@ -1918,7 +4181,82 @@ import './styles.css';
   function findById(collection, id) {
     return (collection || []).find((item) => String(item.id) === String(id));
   }
+  function upsertCommunityCollections(community) {
+    if (!community?.id) return;
 
+    const id = String(community.id);
+
+    if (state.communities) {
+      const communitiesWithoutCurrent = state.communities.filter(
+        (item) => String(item.id) !== id
+      );
+
+      state.communities = sortByDate(
+        uniqueById([community, ...communitiesWithoutCurrent]),
+        'createdAt'
+      );
+    }
+
+    if (state.myCommunities) {
+      const myCommunitiesWithoutCurrent = state.myCommunities.filter(
+        (item) => String(item.id) !== id
+      );
+
+      state.myCommunities = community.currentUserMember
+        ? sortByDate(
+            [community, ...myCommunitiesWithoutCurrent],
+            'createdAt'
+          )
+        : myCommunitiesWithoutCurrent;
+    }
+  }
+
+  function uniqueById(items) {
+    const itemsMap = new Map();
+
+    (items || []).forEach((item) => {
+      if (!item?.id) return;
+
+      const id = String(item.id);
+
+      if (!itemsMap.has(id)) {
+        itemsMap.set(id, item);
+      }
+    });
+
+    return [...itemsMap.values()];
+  }
+
+  function sortChats(chats) {
+    return [...(chats || [])].sort((firstChat, secondChat) => {
+      const firstDate =
+        firstChat?.lastMessage?.sentAt ||
+        firstChat?.createdAt ||
+        0;
+
+      const secondDate =
+        secondChat?.lastMessage?.sentAt ||
+        secondChat?.createdAt ||
+        0;
+
+      return (
+        new Date(secondDate).getTime() -
+        new Date(firstDate).getTime()
+      );
+    });
+  }
+
+  function sortByDateAscending(items, field) {
+    return [...(items || [])].sort((firstItem, secondItem) => {
+      const firstDate = firstItem?.[field] || 0;
+      const secondDate = secondItem?.[field] || 0;
+
+      return (
+        new Date(firstDate).getTime() -
+        new Date(secondDate).getTime()
+      );
+    });
+  }
   function sortByDate(items, field) {
     return [...(items || [])].sort((a, b) => new Date(b?.[field] || b?.createdAt || 0).getTime() - new Date(a?.[field] || a?.createdAt || 0).getTime());
   }
@@ -1965,8 +4303,139 @@ import './styles.css';
   }
 
   function getInitials(user) {
-    const source = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'T';
-    return source.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+      const source = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'T';
+      return source.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+    }
+
+  function getMemberInitials(member) {
+    const fullName = [
+      member?.firstName,
+      member?.lastName,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const source =
+      fullName ||
+      member?.username ||
+      member?.email ||
+      'П';
+
+    return source
+      .split(/[\s._@-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase();
+  }
+
+  function communityRoleLabel(role) {
+    const normalizedRole = String(role || '')
+      .trim()
+      .toUpperCase();
+
+    const labels = {
+      OWNER: 'Владелец',
+      ADMIN: 'Администратор',
+      MODERATOR: 'Модератор',
+      MEMBER: 'Участник',
+    };
+
+    return labels[normalizedRole] || role || 'Участник';
+  }
+
+  function getChatInitials(chat) {
+    const source =
+      chat?.companionUsername ||
+      chat?.companionEmail ||
+      'С';
+
+    return String(source)
+      .split(/[\s._@-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase();
+  }
+
+  function formatChatTime(value) {
+    if (!value) {
+      return '';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+
+    const now = new Date();
+
+    const sameDay =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+
+    if (sameDay) {
+      return new Intl.DateTimeFormat('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    }
+
+    const sameYear =
+      date.getFullYear() === now.getFullYear();
+
+    if (sameYear) {
+      return new Intl.DateTimeFormat('ru-RU', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    }
+
+    return new Intl.DateTimeFormat('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(date);
+  }
+
+  function updateChatLastMessage(
+    chatId,
+    message
+  ) {
+    if (!state.chats) {
+      return;
+    }
+
+    state.chats = sortChats(
+      state.chats.map((chat) =>
+        String(chat.id) === String(chatId)
+          ? {
+              ...chat,
+              lastMessage: message,
+            }
+          : chat
+      )
+    );
+  }
+
+  function scrollChatToBottom() {
+    const messagesContainer =
+      app.querySelector('[data-messages]');
+
+    if (!messagesContainer) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      messagesContainer.scrollTop =
+        messagesContainer.scrollHeight;
+    });
   }
 
   function shortId(value) {

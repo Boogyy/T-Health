@@ -29,7 +29,6 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
 
     List<PostEntity> findAllByUser_KeycloakIdAndPostTypeOrderByCreatedAtDesc(UUID userId, PostType type);
 
-<<<<<<< HEAD
     Optional<PostEntity> findByIdAndVisibility(UUID id, PostVisibility visibility);
 
     Optional<PostEntity> findByIdAndUser_KeycloakId(UUID postId, UUID userId);
@@ -37,9 +36,7 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
     Optional<PostEntity> findByWorkout_Id(UUID workoutId);
 
     Optional<PostEntity> findByRecipe_Id(UUID recipeId);
-=======
     List<PostEntity> findAllByCommunity_IdOrderByCreatedAtDesc(UUID communityId);
->>>>>>> 122d970 (feat: add communities and comments)
 
     boolean existsByWorkout_Id(UUID workoutId);
 
