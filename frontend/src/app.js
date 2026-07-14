@@ -53,6 +53,9 @@ import './styles.css';
     communityPosts: {},
     postComments: {},
 
+    publicPostDetails: {},
+    publicPostLoadingIds: new Set(),
+
     chats: null,
     chatMessages: {},
 
@@ -571,6 +574,45 @@ import './styles.css';
     }
   }
 
+  async function loadPublicPost(postId, force = false) {
+    const id = String(postId);
+
+    const hasPost = Boolean(state.publicPostDetails[id]);
+    const hasComments = Object.prototype.hasOwnProperty.call(
+      state.postComments,
+      id
+    );
+
+    if (hasPost && hasComments && !force) return;
+    if (state.publicPostLoadingIds.has(id)) return;
+
+    state.publicPostLoadingIds.add(id);
+    state.error = null;
+    renderRoute(false);
+
+    try {
+      const [user, post, comments] = await Promise.all([
+        getCurrentUser(),
+        apiFetch(`/api/posts/${encodeURIComponent(id)}`),
+        apiFetch(`/api/posts/${encodeURIComponent(id)}/comments`),
+      ]);
+
+      state.user = user;
+      state.publicPostDetails[id] = post;
+      state.postComments[id] = Array.isArray(comments) ? comments : [];
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        navigate('/login');
+        return;
+      }
+
+      state.error = friendlyError(error);
+    } finally {
+      state.publicPostLoadingIds.delete(id);
+      renderRoute(false);
+    }
+  }
+
   async function loadChats(force = false) {
     if (state.chatsLoading) return;
     if (state.chats && !force) return;
@@ -646,6 +688,9 @@ import './styles.css';
     state.communityMembers = {};
     state.communityPosts = {};
     state.postComments = {};
+
+    state.publicPostDetails = {};
+    state.publicPostLoadingIds.clear();
 
     state.chats = null;
     state.chatMessages = {};
@@ -726,6 +771,21 @@ import './styles.css';
 
     if (parts[0] === 'feed') {
       renderProtected(renderFeedRoute(parts));
+
+      if (parts[1] && parts[1] !== 'new') {
+        const postId = String(parts[1]);
+        const commentsLoaded = Object.prototype.hasOwnProperty.call(
+          state.postComments,
+          postId
+        );
+
+        if (!state.publicPostDetails[postId] || !commentsLoaded) {
+          loadPublicPost(postId);
+        }
+
+        return;
+      }
+
       if (!state.feedPosts && !isPostFormRoute(parts)) loadFeed();
       if ((isPostFormRoute(parts) || parts[1] === 'new') && (!state.workouts || !state.recipes || !state.achievements)) loadDashboard();
       return;
@@ -1426,6 +1486,7 @@ import './styles.css';
 
   function renderFeedRoute(parts) {
     if (parts[1] === 'new') return renderPostForm(parts[2] || 'text');
+    if (parts[1]) return renderPublicPostDetails(parts[1]);
 
     if (state.error) return pageHeader('Лента', 'Не удалось получить данные.') + alertHtml('error', state.error);
     if (!state.feedPosts) return pageHeader('Лента', 'Получаем публичные посты.') + skeletonGrid();
@@ -1507,12 +1568,20 @@ import './styles.css';
 
   function postCard(post) {
     const type = post.type || post.postType || 'TEXT';
+    const title = post.title || 'Пост без заголовка';
+
     return `
-      <article class="post-card">
+      <article
+        class="post-card public-post-card"
+        data-open-public-post="${escapeHtml(post.id)}"
+        tabindex="0"
+        role="link"
+        aria-label="Открыть публикацию: ${escapeHtml(title)}"
+      >
         <div class="post-header">
           <div>
             <span class="badge">${postTypeLabel(type)}</span>
-            <h3>${escapeHtml(post.title || 'Пост без заголовка')}</h3>
+            <h3>${escapeHtml(title)}</h3>
             <p class="muted">${escapeHtml(post.username || 'Пользователь')} · ${formatDateTime(post.createdAt)}</p>
           </div>
         </div>
@@ -1520,7 +1589,134 @@ import './styles.css';
         ${post.workout ? postWorkoutPayload(post.workout) : ''}
         ${post.recipe ? postRecipePayload(post.recipe) : ''}
         ${post.userAchievement ? postAchievementPayload(post.userAchievement) : ''}
+        <div class="public-post-card-footer">
+          <span>Открыть публикацию и комментарии</span>
+          <span aria-hidden="true">→</span>
+        </div>
       </article>`;
+  }
+
+  function renderPublicPostDetails(postId) {
+    const id = String(postId);
+    const post = state.publicPostDetails[id];
+    const comments = state.postComments[id];
+    const loading = state.publicPostLoadingIds.has(id);
+
+    if (state.error && !post) {
+      return `
+        <div class="public-post-overlay" data-close-public-post>
+          <section
+            class="public-post-dialog public-post-dialog-error"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="public-post-title"
+          >
+            <a class="public-post-close" href="#/feed" aria-label="Закрыть">×</a>
+            <h1 id="public-post-title">Не удалось открыть публикацию</h1>
+            ${alertHtml('error', state.error)}
+            <a class="btn" href="#/feed">Вернуться в ленту</a>
+          </section>
+        </div>
+      `;
+    }
+
+    if (!post || loading || !comments) {
+      return `
+        <div class="public-post-overlay" data-close-public-post>
+          <section
+            class="public-post-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Загрузка публикации"
+          >
+            <a class="public-post-close" href="#/feed" aria-label="Закрыть">×</a>
+            <div class="skeleton public-post-dialog-skeleton"></div>
+          </section>
+        </div>
+      `;
+    }
+
+    const type = post.type || post.postType || 'TEXT';
+
+    return `
+      <div class="public-post-overlay" data-close-public-post>
+        <section
+          class="public-post-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="public-post-title"
+          data-public-post-dialog
+        >
+          <a class="public-post-close" href="#/feed" aria-label="Закрыть публикацию">×</a>
+
+          ${flashHtml()}
+          ${state.error ? alertHtml('error', state.error) : ''}
+
+          <article class="post-card post-detail-card public-post-detail-card">
+            <div class="post-header">
+              <div>
+                <span class="badge">${postTypeLabel(type)}</span>
+                <h1 id="public-post-title">${escapeHtml(post.title || 'Публикация')}</h1>
+                <p class="muted">${escapeHtml(post.username || 'Пользователь')} · ${formatDateTime(post.createdAt)}</p>
+              </div>
+            </div>
+
+            ${post.content ? `<p class="post-content">${escapeHtml(post.content)}</p>` : ''}
+            ${post.workout ? postWorkoutPayload(post.workout) : ''}
+            ${post.recipe ? postRecipePayload(post.recipe) : ''}
+            ${post.userAchievement ? postAchievementPayload(post.userAchievement) : ''}
+          </article>
+
+          <section class="comments-section public-post-comments">
+            <div class="subsection-heading">
+              <div>
+                <h2>Комментарии</h2>
+                <p class="muted">Обсуждение публичной публикации.</p>
+              </div>
+
+              <span class="status-pill" aria-label="Количество комментариев">
+                ${comments.length}
+              </span>
+            </div>
+
+            ${comments.length
+              ? `
+                <div class="comment-list">
+                  ${comments
+                    .map((comment) => commentCard(null, post, comment))
+                    .join('')}
+                </div>
+              `
+              : `
+                <div class="empty-comments">
+                  <strong>Комментариев пока нет</strong>
+                  <span>Начните обсуждение первым.</span>
+                </div>
+              `}
+
+            <form
+              id="comment-form"
+              class="comment-form"
+              data-post-id="${escapeHtml(post.id)}"
+            >
+              <label class="sr-only" for="public-comment-content">
+                Комментарий
+              </label>
+
+              <textarea
+                id="public-comment-content"
+                name="content"
+                required
+                maxlength="2000"
+                placeholder="Напишите комментарий"
+              ></textarea>
+
+              <button class="btn" type="submit">Отправить</button>
+            </form>
+          </section>
+        </section>
+      </div>
+    `;
   }
 
   function postWorkoutPayload(workout) {
@@ -3072,6 +3268,30 @@ import './styles.css';
       });
     });
 
+    app.querySelectorAll('[data-open-public-post]').forEach((card) => {
+      const open = () => {
+        navigate(`/feed/${card.dataset.openPublicPost}`);
+      };
+
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        open();
+      });
+    });
+
+    app.querySelectorAll('[data-close-public-post]').forEach((overlay) => {
+      overlay.addEventListener('click', (event) => {
+        if (event.target !== overlay) return;
+        navigate('/feed');
+      });
+    });
+
+    app.querySelectorAll('[data-public-post-dialog]').forEach((dialog) => {
+      dialog.addEventListener('click', (event) => event.stopPropagation());
+    });
+
     app.querySelectorAll('[data-food-date-action]').forEach((button) => {
       button.addEventListener('click', () => {
         const current = parseISODate(state.foodDate);
@@ -3209,6 +3429,14 @@ import './styles.css';
     state.error = null;
     const parts = routeParts();
     if (parts[0] === 'feed') {
+      if (parts[1] && parts[1] !== 'new') {
+        const postId = String(parts[1]);
+        delete state.publicPostDetails[postId];
+        delete state.postComments[postId];
+        await loadPublicPost(postId, true);
+        return;
+      }
+
       state.feedPosts = null;
       await loadFeed(true);
       return;
