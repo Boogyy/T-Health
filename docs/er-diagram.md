@@ -1,10 +1,9 @@
-
 # ER-диаграмма базы данных
 
 ## Описание
 
-База данных проекта T-Health хранит информацию о пользователях, постах в ленте активности, комментариях, тренировках, приемах пищи, 
-рецептах, достижениях, сообществах и чатах.
+База данных проекта T-Health хранит информацию о пользователях, постах в ленте активности, комментариях, тренировках, приемах пищи,
+рецептах, достижениях, сообществах и личных чатах.
 
 
 В системе разделяются личные записи пользователя и публичные публикации в ленте:
@@ -12,7 +11,10 @@
 - `food_entries` — личные записи о приёмах пищи пользователя. Они используются для отслеживания КБЖУ и по умолчанию не отображаются в ленте.
 - `workouts` — личные записи о тренировках пользователя. Тренировка может оставаться личной или быть опубликована в ленте через пост.
 - `recipes` — рецепты пользователя. Рецепт может быть создан для личного использования или опубликован в ленте через пост.
-- `posts` — публичные публикации в ленте активности. Пост может быть обычным текстовым постом или ссылаться на тренировку, рецепт или достижение пользователя.
+- `posts` — публикации в ленте активности. Пост может быть обычным текстовым постом или ссылаться на тренировку, рецепт или достижение пользователя. Посты могут быть публичными или относиться к конкретному сообществу.
+- `direct_chats` и `direct_messages` — личные чаты 1 на 1 и сообщения внутри них.
+
+Аутентификация пользователей выполняется через Keycloak. В локальной таблице `users` хранится идентификатор пользователя из Keycloak и информация профиля. Пароли и роли пользователей в локальной базе данных не хранятся.
 
 ## Основные сущности
 
@@ -36,8 +38,6 @@
     
 -   `community_members` - участники сообществ
 
--   `messages` — сообщения внутри сообществ
-
 -   `direct_chats` — личные чаты 1 на 1
 
 -   `direct_messages` — сообщения в личных чатах
@@ -55,7 +55,6 @@ erDiagram
     users ||--o{ user_achievements : receives
     users ||--o{ communities : owns
     users ||--o{ community_members : joins
-    users ||--o{ messages : sends
 
     posts ||--o{ comments : has
     
@@ -67,23 +66,18 @@ erDiagram
 
     communities ||--o{ community_members : contains
     communities |o--o{ posts : contains
-
-
-    communities ||--o{ messages : contains
     
-    users ||--o{ direct_chats : starts
-    users ||--o{ direct_chats : receives
+    users ||--o{ direct_chats : first_participant
+    users ||--o{ direct_chats : second_participant
     direct_chats ||--o{ direct_messages : contains
     users ||--o{ direct_messages : sends
 
     users {
-        uuid id PK
-        varchar username
-        varchar email
-        varchar password_hash
+        uuid keycloak_id PK
+        varchar username UK
+        varchar email UK
         varchar first_name
         varchar last_name
-        varchar role
         timestamp created_at
         timestamp updated_at
     }
@@ -129,9 +123,9 @@ erDiagram
         uuid user_id FK
         varchar meal_name
         integer calories
-        decimal proteins
-        decimal fats
-        decimal carbohydrates
+        decimal_6_2 proteins
+        decimal_6_2 fats
+        decimal_6_2 carbohydrates
         timestamp meal_date
         timestamp created_at
         timestamp updated_at
@@ -145,9 +139,9 @@ erDiagram
         text ingredients
         text cooking_steps
         integer calories
-        decimal proteins
-        decimal fats
-        decimal carbohydrates
+        decimal_6_2 proteins
+        decimal_6_2 fats
+        decimal_6_2 carbohydrates
         varchar image_url
         timestamp created_at
         timestamp updated_at
@@ -155,7 +149,7 @@ erDiagram
 
     achievements {
         uuid id PK
-        varchar code
+        varchar code UK
         varchar title
         text description
         timestamp created_at
@@ -171,7 +165,7 @@ erDiagram
     communities {
         uuid id PK
         uuid owner_id FK
-        varchar name
+        varchar community_name
         text description
         timestamp created_at
         timestamp updated_at
@@ -195,14 +189,6 @@ erDiagram
     direct_messages {
         uuid id PK
         uuid chat_id FK
-        uuid sender_id FK
-        text content
-        timestamp sent_at
-    }
-
-    messages {
-        uuid id PK
-        uuid community_id FK
         uuid sender_id FK
         text content
         timestamp sent_at
@@ -239,7 +225,7 @@ erDiagram
 
 ### Посты
 
-Пост является публичной публикацией в ленте активности.
+Пост является публикацией в ленте активности.
 
 Поле `type` определяет тип поста:
 
@@ -251,7 +237,7 @@ erDiagram
 Поле `visibility` определяет видимость поста:
 
 * `PUBLIC` - пост доступен всем пользователям;
-* `COMMUNITY` - пост доступен участникам конкретного сообщества.
+* `COMMUNITY` - пост относится к конкретному сообществу и доступен в его ленте.
 
 Если `visibility = COMMUNITY`, поле `community_id` должно быть заполнено.
 
@@ -264,6 +250,18 @@ erDiagram
 Если `type = ACHIEVEMENT`, должно быть заполнено поле `user_achievement_id`.
 
 Если `type = TEXT`, поля `workout_id`, `recipe_id` и `user_achievement_id` должны быть пустыми.
+
+Одна тренировка, один рецепт или одно полученное достижение могут быть опубликованы в ленте не более одного раза.
+
+### Личные чаты
+
+Личный чат хранится в таблице `direct_chats` и связывает двух различных пользователей.
+
+Для одной неупорядоченной пары пользователей может существовать только один личный чат. Это означает, что пары «пользователь A — пользователь B» и «пользователь B — пользователь A» считаются одним и тем же чатом.
+
+Сообщения личного чата хранятся в таблице `direct_messages` и связаны с чатом через поле `chat_id`.
+
+Отправлять сообщения и просматривать историю личного чата могут только его участники.
 
 ## Связи между таблицами
 
@@ -285,7 +283,7 @@ erDiagram
 
 ### workouts → posts
 
-Одна тренировка может быть опубликована как пост в ленте активности.
+Одна тренировка может быть опубликована как пост в ленте активности не более одного раза.
 
 ### users → food_entries
 
@@ -297,7 +295,7 @@ erDiagram
 
 ### recipes → posts
 
-Один рецепт может быть опубликован как пост в ленте активности.
+Один рецепт может быть опубликован как пост в ленте активности не более одного раза.
 
 ### users → user_achievements
 
@@ -309,7 +307,7 @@ erDiagram
 
 ### user_achievements → posts
 
-Полученное пользователем достижение может быть опубликовано как пост в ленте активности.
+Полученное пользователем достижение может быть опубликовано как пост в ленте активности не более одного раза.
 
 ### users → communities
 
@@ -327,21 +325,21 @@ erDiagram
 
 Один пользователь может состоять в нескольких сообществах.
 
-### communities → chats
+### users → direct_chats
 
-Одно сообщество имеет один чат.
+Один пользователь может участвовать во многих личных чатах как первый или второй участник.
 
-### chats → messages
+### direct_chats → direct_messages
 
-Один чат содержит много сообщений.
+Один личный чат может содержать много сообщений.
 
-### users → messages
+### users → direct_messages
 
-Один пользователь может отправить много сообщений.
+Один пользователь может отправить много личных сообщений.
 
 ## Индексы и ограничения
 
-Для повышения производительности и целостности данных планируется использовать:
+Для повышения производительности и обеспечения целостности данных используются:
 
 -   уникальный индекс на `users.email`;
     
@@ -353,34 +351,26 @@ erDiagram
     
 -   уникальный индекс на пару `community_members(community_id, user_id)`;
 
--   уникальный индекс на `chats.community_id`, чтобы у одного сообщества был только один чат;
+-   уникальный индекс на неупорядоченную пару участников личного чата `direct_chats(first_user_id, second_user_id)`;
   
 -   уникальный индекс на `posts.workout_id`, где `workout_id` IS NOT NULL; 
 
 -   уникальный индекс на `posts.recipe_id`, где `recipe_id` IS NOT NULL;
   
--   уникальный индекс на `posts.user_achievement_id`, где `user_achievement_id` IS NOT NULL.
+-   уникальный индекс на `posts.user_achievement_id`, где `user_achievement_id` IS NOT NULL;
 
--   индекс на `posts.created_at` для ускорения сортировки ленты активности;
+-   индекс на `posts.created_at DESC` для ускорения сортировки ленты активности;
 
--   индекс на `messages.sent_at` для сортировки истории сообщений;
+-   составной индекс на `comments(post_id, created_at DESC)` для получения комментариев поста;
 
--   индекс на `comments.created_at` для сортировки комментариев.
-    
+-   составной индекс на `direct_messages(chat_id, sent_at DESC)` для сортировки истории личных сообщений;
+
 -   индексы на внешние ключи:
     
     -   `posts.author_id`;
     
     -   `posts.community_id`;
     
-    -   `posts.workout_id`;
-
-    -   `posts.recipe_id`;
-    
-    -   `posts.user_achievement_id`;
-        
-    -   `comments.post_id`;
-        
     -   `comments.author_id`;
         
     -   `workouts.user_id`;
@@ -398,31 +388,47 @@ erDiagram
     -   `community_members.community_id`;
     
     -   `community_members.user_id`;
-    
-    -   `chats.community_id`;
-        
-    -   `messages.chat_id`;
-        
-    -   `messages.sender_id`.
 
+    -   `direct_messages.sender_id`.
+
+Также используются следующие проверочные ограничения:
+
+-   продолжительность тренировки должна быть больше нуля;
+
+-   количество сожжённых калорий тренировки не может быть отрицательным;
+
+-   калории, белки, жиры и углеводы записи питания не могут быть отрицательными;
+
+-   калории, белки, жиры и углеводы рецепта не могут быть отрицательными, если они заполнены;
+
+-   роль участника сообщества может иметь значение `OWNER`, `MODERATOR` или `MEMBER`;
+
+-   тип поста может иметь значение `TEXT`, `WORKOUT`, `RECIPE` или `ACHIEVEMENT`;
+
+-   видимость поста может иметь значение `PUBLIC` или `COMMUNITY`;
+
+-   участниками личного чата должны быть два разных пользователя.
+
+Дополнительная согласованность типа поста, его видимости и связанных сущностей контролируется бизнес-логикой приложения.
 
 ## Типы связей
 
-| Связь                      | Тип                                    |
-| -------------------------- | -------------------------------------- |
-| User - Post                | One-to-Many                            |
-| User - Comment             | One-to-Many                            |
-| Post - Comment             | One-to-Many                            |
-| User - Workout             | One-to-Many                            |
-| Workout - Post             | One-to-Zero-or-One                     |
-| User - FoodEntry           | One-to-Many                            |
-| User - Recipe              | One-to-Many                            |
-| Recipe - Post              | One-to-Zero-or-One                     |
-| User - Achievement         | Many-to-Many через `user_achievements` |
-| UserAchievement - Post     | One-to-Zero-or-One                     |
-| User - Community as owner  | One-to-Many                            |
-| User - Community as member | Many-to-Many через `community_members` |
-| Community - Post           | One-to-Many                            |
-| Community - Chat           | One-to-One                             |
-| Chat - Message             | One-to-Many                            |
-| User - Message             | One-to-Many                            |
+| Связь                                  | Тип                                    |
+| -------------------------------------- | -------------------------------------- |
+| User - Post                            | One-to-Many                            |
+| User - Comment                         | One-to-Many                            |
+| Post - Comment                         | One-to-Many                            |
+| User - Workout                         | One-to-Many                            |
+| Workout - Post                         | One-to-Zero-or-One                     |
+| User - FoodEntry                       | One-to-Many                            |
+| User - Recipe                          | One-to-Many                            |
+| Recipe - Post                          | One-to-Zero-or-One                     |
+| User - Achievement                     | Many-to-Many через `user_achievements` |
+| UserAchievement - Post                 | One-to-Zero-or-One                     |
+| User - Community as owner              | One-to-Many                            |
+| User - Community as member             | Many-to-Many через `community_members` |
+| Community - Post                       | One-to-Many                            |
+| User - DirectChat as first participant | One-to-Many                            |
+| User - DirectChat as second participant| One-to-Many                            |
+| DirectChat - DirectMessage             | One-to-Many                            |
+| User - DirectMessage                   | One-to-Many                            |
