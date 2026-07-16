@@ -25,6 +25,8 @@ public class UserService {
     private final UserAchievementRepository userAchievementRepository;
     private final RecipeRepository recipeRepository;
     private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
+    private final PostDeletionService postDeletionService;
 
 
 
@@ -34,7 +36,11 @@ public class UserService {
             KeycloakAdminClient keycloakAdminClient,
             WorkoutRepository workoutRepository,
             FoodEntryRepository foodEntryRepository,
-            UserAchievementRepository userAchievementRepository, RecipeRepository recipeRepository, PostRepository postRepository
+            UserAchievementRepository userAchievementRepository,
+            RecipeRepository recipeRepository,
+            PostRepository postRepository,
+            CommentRepository commentRepository,
+            PostDeletionService postDeletionService
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
@@ -44,6 +50,8 @@ public class UserService {
         this.userAchievementRepository = userAchievementRepository;
         this.recipeRepository = recipeRepository;
         this.postRepository = postRepository;
+        this.commentRepository = commentRepository;
+        this.postDeletionService = postDeletionService;
     }
 
     @Transactional
@@ -129,7 +137,11 @@ public class UserService {
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
-        postRepository.deleteAllByUser_KeycloakId(keycloakId);
+        // Комментарии пользователя под чужими и собственными постами
+        commentRepository.deleteAllByAuthor_KeycloakId(keycloakId);
+
+        // Все посты пользователя и оставшиеся комментарии других пользователей под этими постами
+        postDeletionService.deleteAllPostsByUser(keycloakId);
 
         workoutRepository.deleteAllByUser_KeycloakId(keycloakId);
         foodEntryRepository.deleteAllByUser_KeycloakId(keycloakId);

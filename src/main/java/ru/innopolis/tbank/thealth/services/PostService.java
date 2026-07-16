@@ -30,6 +30,7 @@ public class PostService {
     private final PostMapper postMapper;
     private final WorkoutService workoutService;
     private final RecipeService recipeService;
+    private final PostDeletionService postDeletionService;
 
     public PostService(
             UserAchievementRepository userAchievementRepository,
@@ -39,7 +40,8 @@ public class PostService {
             RecipeRepository recipeRepository,
             PostMapper postMapper,
             WorkoutService workoutService,
-            RecipeService recipeService
+            RecipeService recipeService,
+            PostDeletionService postDeletionService
     ) {
         this.userAchievementRepository = userAchievementRepository;
         this.userRepository = userRepository;
@@ -49,6 +51,7 @@ public class PostService {
         this.postMapper = postMapper;
         this.workoutService = workoutService;
         this.recipeService = recipeService;
+        this.postDeletionService = postDeletionService;
     }
 
     @Transactional(readOnly = true)
@@ -196,11 +199,10 @@ public class PostService {
 
     @Transactional
     public void deletePostById(Jwt jwt, UUID postId) {
-        UUID userID = getKeycloakId(jwt);
-        PostEntity postToDelete = postRepository.findByIdAndUser_KeycloakId(postId, userID)
-                .orElseThrow(() -> new PostNotFoundException(postId));
-        postRepository.delete(postToDelete);
+        UUID userId = getKeycloakId(jwt);
+        postDeletionService.deleteOwnedPost(postId, userId);
     }
+
 
     @Transactional(readOnly = true)
     public PostResponse getPostById(UUID postId) {

@@ -16,4 +16,6 @@ public interface CommentRepository extends JpaRepository<CommentEntity, UUID> {
     Optional<CommentEntity> findByIdAndAuthor_KeycloakId(UUID commentId, UUID authorId);
 
     void deleteAllByPost_Id(UUID postId);
+
+    void deleteAllByAuthor_KeycloakId(UUID authorKeycloakId);
 }
