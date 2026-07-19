@@ -75,7 +75,7 @@ public class UserService {
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
-        if (request.username() != null && !request.username().isBlank()) {
+        if (request.username() != null) {
             if (!request.username().equals(user.getUsername())
                     && userRepository.existsByUsername(request.username())) {
                 throw new DuplicateUsernameException(request.username());
@@ -111,11 +111,14 @@ public class UserService {
         String username = jwt.getClaimAsString("preferred_username");
 
         if (email == null || email.isBlank()) {
-            throw new MissingTokenClaimException(email);
+            throw new MissingTokenClaimException("email");
         }
 
         if (username == null || username.isBlank()) {
-            username = "user_" + keycloakId;
+            username = "user_" +
+                    keycloakId.toString()
+                            .replace("-", "")
+                            .substring(0, 16);
         }
 
         UserEntity newUser = new UserEntity();

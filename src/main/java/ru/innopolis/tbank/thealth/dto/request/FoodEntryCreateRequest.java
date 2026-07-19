@@ -22,16 +22,19 @@ public record FoodEntryCreateRequest(
         @Schema(description = "Белки в граммах", example = "12.5")
         @NotNull
         @PositiveOrZero
+        @Digits(integer = 4, fraction = 2)
         BigDecimal proteins,
 
         @Schema(description = "Жиры в граммах", example = "8.0")
         @NotNull
         @PositiveOrZero
+        @Digits(integer = 4, fraction = 2)
         BigDecimal fats,
 
         @Schema(description = "Углеводы в граммах", example = "55.0")
         @NotNull
         @PositiveOrZero
+        @Digits(integer = 4, fraction = 2)
         BigDecimal carbohydrates,
 
         @Schema(description = "Дата приема пищи", example = "2026-06-26T09:00:00")

@@ -86,23 +86,23 @@ public class RecipeService {
         RecipeEntity recipe = recipeRepository.findByIdAndUser_KeycloakId(recipeId, userId)
                 .orElseThrow(() -> new RecipeNotFoundException(recipeId));
 
-        if (recipeUpdateRequest.title() != null && !recipeUpdateRequest.title().isBlank()) {
+        if (recipeUpdateRequest.title() != null) {
             recipe.setTitle(recipeUpdateRequest.title());
         }
 
-        if (recipeUpdateRequest.description() != null && !recipeUpdateRequest.description().isBlank()) {
+        if (recipeUpdateRequest.description() != null) {
             recipe.setDescription(recipeUpdateRequest.description());
         }
 
-        if (recipeUpdateRequest.ingredients() != null && !recipeUpdateRequest.ingredients().isBlank()) {
+        if (recipeUpdateRequest.ingredients() != null) {
             recipe.setIngredients(recipeUpdateRequest.ingredients());
         }
 
-        if (recipeUpdateRequest.cookingSteps() != null && !recipeUpdateRequest.cookingSteps().isBlank()) {
+        if (recipeUpdateRequest.cookingSteps() != null) {
             recipe.setCookingSteps(recipeUpdateRequest.cookingSteps());
         }
 
-        if (recipeUpdateRequest.imageUrl() != null && !recipeUpdateRequest.imageUrl().isBlank()) {
+        if (recipeUpdateRequest.imageUrl() != null) {
             recipe.setImageUrl(recipeUpdateRequest.imageUrl());
         }
 

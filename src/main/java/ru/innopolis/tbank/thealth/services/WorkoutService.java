@@ -116,7 +116,7 @@ public class WorkoutService {
     public WorkoutResponse updateWorkout(UUID workoutId, UUID userId, WorkoutUpdateRequest request) {
         WorkoutEntity workout = findOwnedWorkout(workoutId, userId);
 
-        if (request.title() != null && !request.title().isBlank()) {
+        if (request.title() != null) {
             workout.setTitle(request.title());
         }
 
