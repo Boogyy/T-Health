@@ -40,24 +40,24 @@ public class CommunityService {
     private final CommunityMemberRepository communityMemberRepository;
     private final UserRepository userRepository;
     private final PostRepository postRepository;
-    private final CommentRepository commentRepository;
     private final CommunityMapper communityMapper;
     private final PostMapper postMapper;
+    private final CommunityDeletionService communityDeletionService;
 
     public CommunityService(CommunityRepository communityRepository,
                             CommunityMemberRepository communityMemberRepository,
                             UserRepository userRepository,
                             PostRepository postRepository,
-                            CommentRepository commentRepository,
                             CommunityMapper communityMapper,
-                            PostMapper postMapper) {
+                            PostMapper postMapper,
+                            CommunityDeletionService communityDeletionService) {
         this.communityRepository = communityRepository;
         this.communityMemberRepository = communityMemberRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
-        this.commentRepository = commentRepository;
         this.communityMapper = communityMapper;
         this.postMapper = postMapper;
+        this.communityDeletionService = communityDeletionService;
     }
 
     @Transactional(readOnly = true)
@@ -138,20 +138,18 @@ public class CommunityService {
         return toCommunityResponse(community, currentUserId);
     }
 
+
     @Transactional
-    public void deleteCommunity(UUID communityId, UUID currentUserId) {
+    public void deleteCommunity(
+            UUID communityId,
+            UUID currentUserId
+    ) {
         CommunityEntity community = findCommunity(communityId);
+
         checkOwner(community, currentUserId);
 
-        List<PostEntity> communityPosts = postRepository.findAllByCommunity_IdOrderByCreatedAtDesc(communityId);
-
-        for (PostEntity post : communityPosts) {
-            commentRepository.deleteAllByPost_Id(post.getId());
-        }
-
-        postRepository.deleteAllByCommunity_Id(communityId);
-        communityMemberRepository.deleteAllByCommunity_Id(communityId);
-        communityRepository.delete(community);
+        communityDeletionService
+                .deleteCommunityWithRelations(community);
     }
 
     @Transactional

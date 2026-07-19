@@ -24,9 +24,10 @@ public class UserService {
     private final FoodEntryRepository foodEntryRepository;
     private final UserAchievementRepository userAchievementRepository;
     private final RecipeRepository recipeRepository;
-    private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final PostDeletionService postDeletionService;
+    private final CommunityDeletionService communityDeletionService;
+    private final DirectChatDeletionService directChatDeletionService;
 
 
 
@@ -38,9 +39,10 @@ public class UserService {
             FoodEntryRepository foodEntryRepository,
             UserAchievementRepository userAchievementRepository,
             RecipeRepository recipeRepository,
-            PostRepository postRepository,
             CommentRepository commentRepository,
-            PostDeletionService postDeletionService
+            PostDeletionService postDeletionService,
+            CommunityDeletionService communityDeletionService,
+            DirectChatDeletionService directChatDeletionService
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
@@ -49,9 +51,10 @@ public class UserService {
         this.foodEntryRepository = foodEntryRepository;
         this.userAchievementRepository = userAchievementRepository;
         this.recipeRepository = recipeRepository;
-        this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.postDeletionService = postDeletionService;
+        this.communityDeletionService = communityDeletionService;
+        this.directChatDeletionService = directChatDeletionService;
     }
 
     @Transactional
@@ -136,6 +139,21 @@ public class UserService {
 
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
+
+        /*
+         * Сообщества пользователя-владельца:
+         * посты всех участников, комментарии, memberships
+         */
+        communityDeletionService
+                .deleteAllOwnedCommunities(keycloakId);
+
+        //membership пользователя в сообществах других владельцев
+        communityDeletionService
+                .removeUserFromOtherCommunities(keycloakId);
+
+        // Личные чаты пользователя и все сообщения этих чатов
+        directChatDeletionService
+                .deleteAllChatsByUser(keycloakId);
 
         // Комментарии пользователя под чужими и собственными постами
         commentRepository.deleteAllByAuthor_KeycloakId(keycloakId);

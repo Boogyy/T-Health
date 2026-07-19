@@ -46,6 +46,14 @@ public class PostDeletionService {
         posts.forEach(this::deletePostWithComments);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void deleteAllPostsByCommunity(UUID communityId) {
+        List<PostEntity> posts =
+                postRepository.findAllByCommunity_Id(communityId);
+
+        posts.forEach(this::deletePostWithComments);
+    }
+
     private void deletePostWithComments(PostEntity post) {
         commentRepository.deleteAllByPost_Id(post.getId());
         postRepository.delete(post);
