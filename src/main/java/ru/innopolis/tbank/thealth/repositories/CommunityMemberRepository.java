@@ -24,4 +24,5 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
     void deleteAllByCommunity_Id(UUID communityId);
 
     void deleteAllByUser_KeycloakId(UUID userId);
+
 }

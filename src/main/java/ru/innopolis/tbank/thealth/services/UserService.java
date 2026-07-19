@@ -1,11 +1,13 @@
 package ru.innopolis.tbank.thealth.services;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
+import ru.innopolis.tbank.thealth.events.UserDeletedEvent;
 import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
 import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
@@ -19,7 +21,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AchievementService achievementService;
-    private final KeycloakAdminClient keycloakAdminClient;
+    private final ApplicationEventPublisher eventPublisher;
     private final WorkoutRepository workoutRepository;
     private final FoodEntryRepository foodEntryRepository;
     private final UserAchievementRepository userAchievementRepository;
@@ -34,7 +36,7 @@ public class UserService {
     public UserService (
             UserRepository userRepository,
             AchievementService achievementService,
-            KeycloakAdminClient keycloakAdminClient,
+            ApplicationEventPublisher eventPublisher,
             WorkoutRepository workoutRepository,
             FoodEntryRepository foodEntryRepository,
             UserAchievementRepository userAchievementRepository,
@@ -46,7 +48,7 @@ public class UserService {
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
-        this.keycloakAdminClient = keycloakAdminClient;
+        this.eventPublisher = eventPublisher;
         this.workoutRepository = workoutRepository;
         this.foodEntryRepository = foodEntryRepository;
         this.userAchievementRepository = userAchievementRepository;
@@ -168,7 +170,9 @@ public class UserService {
 
         userRepository.delete(user);
 
-        keycloakAdminClient.deleteUser(keycloakId);
+        userRepository.flush();
+
+        eventPublisher.publishEvent(new UserDeletedEvent(keycloakId));
     }
 
 }
