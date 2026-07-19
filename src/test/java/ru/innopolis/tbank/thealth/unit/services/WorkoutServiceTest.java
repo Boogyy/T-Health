@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.innopolis.tbank.thealth.dto.request.WorkoutCreateRequest;
@@ -22,6 +23,7 @@ import ru.innopolis.tbank.thealth.repositories.PostRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
 import ru.innopolis.tbank.thealth.services.AchievementService;
+import ru.innopolis.tbank.thealth.services.PostDeletionService;
 import ru.innopolis.tbank.thealth.services.WorkoutService;
 import ru.innopolis.tbank.thealth.support.TestFixtures;
 
@@ -45,6 +47,8 @@ class WorkoutServiceTest {
     private AchievementService achievementService;
     @Mock
     private PostRepository postRepository;
+    @Mock
+    private PostDeletionService postDeletionService;
 
     private WorkoutService workoutService;
 
@@ -55,7 +59,8 @@ class WorkoutServiceTest {
                 workoutRepository,
                 achievementService,
                 new WorkoutMapper(),
-                postRepository
+                postRepository,
+                postDeletionService
         );
     }
 
@@ -159,17 +164,19 @@ class WorkoutServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("published");
 
-        verify(postRepository, never()).delete(any());
+        verifyNoInteractions(postDeletionService);
         verify(workoutRepository, never()).delete(any());
     }
 
     @Test
-    @DisplayName("При подтверждении удаляются связанный пост и тренировка")
+    @DisplayName("При подтверждении удаление поста делегируется PostDeletionService, затем удаляется тренировка")
     void deleteWorkout_whenConfirmed_shouldDeletePostAndWorkout() {
         UUID workoutId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
         UserEntity user = TestFixtures.user(TestFixtures.USER_ID, "george");
         WorkoutEntity workout = TestFixtures.workout(workoutId, user);
         PostEntity post = new PostEntity();
+        post.setId(postId);
 
         when(workoutRepository.findByIdAndUser_KeycloakId(workoutId, user.getKeycloakId()))
                 .thenReturn(Optional.of(workout));
@@ -177,8 +184,10 @@ class WorkoutServiceTest {
 
         workoutService.deleteWorkout(workoutId, user.getKeycloakId(), true);
 
-        verify(postRepository).delete(post);
-        verify(workoutRepository).delete(workout);
+        InOrder inOrder = inOrder(postDeletionService, workoutRepository);
+        inOrder.verify(postDeletionService).deleteOwnedPost(postId, user.getKeycloakId());
+        inOrder.verify(workoutRepository).delete(workout);
+        verify(postRepository, never()).delete(any());
     }
 
     @Test

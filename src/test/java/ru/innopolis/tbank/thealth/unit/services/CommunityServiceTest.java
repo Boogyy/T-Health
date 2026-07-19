@@ -20,14 +20,13 @@ import ru.innopolis.tbank.thealth.enums.PostType;
 import ru.innopolis.tbank.thealth.enums.PostVisibility;
 import ru.innopolis.tbank.thealth.exceptions.BadRequestException;
 import ru.innopolis.tbank.thealth.exceptions.CommunityAlreadyExistsException;
-import ru.innopolis.tbank.thealth.exceptions.CommunityMemberNotFoundException;
 import ru.innopolis.tbank.thealth.mappers.CommunityMapper;
 import ru.innopolis.tbank.thealth.mappers.PostMapper;
-import ru.innopolis.tbank.thealth.repositories.CommentRepository;
 import ru.innopolis.tbank.thealth.repositories.CommunityMemberRepository;
 import ru.innopolis.tbank.thealth.repositories.CommunityRepository;
 import ru.innopolis.tbank.thealth.repositories.PostRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
+import ru.innopolis.tbank.thealth.services.CommunityDeletionService;
 import ru.innopolis.tbank.thealth.services.CommunityService;
 
 import java.time.LocalDateTime;
@@ -50,9 +49,9 @@ class CommunityServiceTest {
     @Mock private CommunityMemberRepository communityMemberRepository;
     @Mock private UserRepository userRepository;
     @Mock private PostRepository postRepository;
-    @Mock private CommentRepository commentRepository;
     @Mock private CommunityMapper communityMapper;
     @Mock private PostMapper postMapper;
+    @Mock private CommunityDeletionService communityDeletionService;
 
     @Test
     void createCommunity_validRequest_createsCommunityAndOwnerMembership() {
@@ -138,7 +137,7 @@ class CommunityServiceTest {
     }
 
     @Test
-    void createCommunityTextPost_nonMember_throwsNotFound() {
+    void createCommunityTextPost_nonMember_throwsAccessDenied() {
         CommunityEntity community = community(user(OWNER_ID, "owner"));
         when(communityRepository.findById(COMMUNITY_ID)).thenReturn(Optional.of(community));
         when(userRepository.findByKeycloakId(MEMBER_ID)).thenReturn(Optional.of(user(MEMBER_ID, "member")));
@@ -149,7 +148,7 @@ class CommunityServiceTest {
                 COMMUNITY_ID,
                 MEMBER_ID,
                 new CommunityPostCreateRequest("Встреча", "Кто идет на пробежку?")
-        )).isInstanceOf(CommunityMemberNotFoundException.class);
+        )).isInstanceOf(AccessDeniedException.class);
 
         verify(postRepository, never()).save(any());
     }
@@ -184,15 +183,53 @@ class CommunityServiceTest {
         assertThat(result).isSameAs(expected);
     }
 
+    @Test
+    void deleteCommunity_owner_delegatesToDeletionService() {
+        CommunityEntity community = community(user(OWNER_ID, "owner"));
+        when(communityRepository.findById(COMMUNITY_ID)).thenReturn(Optional.of(community));
+
+        service().deleteCommunity(COMMUNITY_ID, OWNER_ID);
+
+        verify(communityDeletionService).deleteCommunityWithRelations(community);
+    }
+
+    @Test
+    void getCommunityMembers_nonMember_throwsAccessDeniedBeforeReadingMembers() {
+        CommunityEntity community = community(user(OWNER_ID, "owner"));
+        when(communityRepository.findById(COMMUNITY_ID)).thenReturn(Optional.of(community));
+        when(communityMemberRepository.existsByCommunity_IdAndUser_KeycloakId(COMMUNITY_ID, MEMBER_ID))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service().getCommunityMembers(COMMUNITY_ID, MEMBER_ID))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(communityMemberRepository, never())
+                .findAllByCommunity_IdOrderByJoinedAtDesc(COMMUNITY_ID);
+    }
+
+    @Test
+    void getCommunityPosts_nonMember_throwsAccessDeniedBeforeReadingPosts() {
+        CommunityEntity community = community(user(OWNER_ID, "owner"));
+        when(communityRepository.findById(COMMUNITY_ID)).thenReturn(Optional.of(community));
+        when(communityMemberRepository.existsByCommunity_IdAndUser_KeycloakId(COMMUNITY_ID, MEMBER_ID))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service().getCommunityPosts(COMMUNITY_ID, MEMBER_ID))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(postRepository, never())
+                .findAllByCommunity_IdOrderByCreatedAtDesc(COMMUNITY_ID);
+    }
+
     private CommunityService service() {
         return new CommunityService(
                 communityRepository,
                 communityMemberRepository,
                 userRepository,
                 postRepository,
-                commentRepository,
                 communityMapper,
-                postMapper
+                postMapper,
+                communityDeletionService
         );
     }
 

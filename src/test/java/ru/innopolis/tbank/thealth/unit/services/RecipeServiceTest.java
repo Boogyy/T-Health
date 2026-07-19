@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,6 +22,7 @@ import ru.innopolis.tbank.thealth.mappers.RecipeMapper;
 import ru.innopolis.tbank.thealth.repositories.PostRepository;
 import ru.innopolis.tbank.thealth.repositories.RecipeRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
+import ru.innopolis.tbank.thealth.services.PostDeletionService;
 import ru.innopolis.tbank.thealth.services.RecipeService;
 import ru.innopolis.tbank.thealth.support.TestFixtures;
 
@@ -43,6 +45,8 @@ class RecipeServiceTest {
     private RecipeRepository recipeRepository;
     @Mock
     private PostRepository postRepository;
+    @Mock
+    private PostDeletionService postDeletionService;
 
     private RecipeService recipeService;
 
@@ -52,7 +56,8 @@ class RecipeServiceTest {
                 userRepository,
                 recipeRepository,
                 new RecipeMapper(),
-                postRepository
+                postRepository,
+                postDeletionService
         );
     }
 
@@ -161,15 +166,18 @@ class RecipeServiceTest {
                 .hasMessageContaining("published");
 
         verify(recipeRepository, never()).delete(any());
+        verifyNoInteractions(postDeletionService);
     }
 
     @Test
-    @DisplayName("При подтверждении удаляются связанный пост и рецепт")
+    @DisplayName("При подтверждении удаление поста делегируется PostDeletionService, затем удаляется рецепт")
     void deleteRecipe_whenConfirmed_shouldDeleteDependencies() {
         UUID recipeId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
         UserEntity user = TestFixtures.user(TestFixtures.USER_ID, "george");
         RecipeEntity recipe = TestFixtures.recipe(recipeId, user);
         PostEntity post = new PostEntity();
+        post.setId(postId);
 
         when(recipeRepository.findByIdAndUser_KeycloakId(recipeId, user.getKeycloakId()))
                 .thenReturn(Optional.of(recipe));
@@ -177,8 +185,10 @@ class RecipeServiceTest {
 
         recipeService.deleteById(TestFixtures.jwt(user.getKeycloakId()), recipeId, true);
 
-        verify(postRepository).delete(post);
-        verify(recipeRepository).delete(recipe);
+        InOrder inOrder = inOrder(postDeletionService, recipeRepository);
+        inOrder.verify(postDeletionService).deleteOwnedPost(postId, user.getKeycloakId());
+        inOrder.verify(recipeRepository).delete(recipe);
+        verify(postRepository, never()).delete(any());
     }
 
     @Test
