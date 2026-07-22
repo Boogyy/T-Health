@@ -2,6 +2,7 @@ package ru.innopolis.tbank.thealth.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import ru.innopolis.tbank.thealth.enums.WorkoutType;
@@ -11,6 +12,7 @@ public record WorkoutUpdateRequest(
 
         @Schema(description = "Название тренировки", example = "Силовая тренировка")
         @Size(max = 128)
+        @Pattern(regexp = "(?s).*\\S.*", message = "Workout title must not be blank")
         String title,
 
         @Schema(description = "Тип тренировки", example = "STRENGTH")

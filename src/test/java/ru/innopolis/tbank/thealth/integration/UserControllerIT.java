@@ -8,7 +8,6 @@ import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.support.TestFixtures;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -77,8 +76,8 @@ class UserControllerIT extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/users/me удаляет локальный профиль и вызывает Keycloak Admin Client")
-    void deleteCurrentUser_shouldDeleteProfileAndKeycloakUser() throws Exception {
+    @DisplayName("DELETE /api/users/me удаляет локальный профиль")
+    void deleteCurrentUser_shouldDeleteLocalProfile() throws Exception {
         persistUser(TestFixtures.USER_ID, "delete-user");
 
         mockMvc.perform(delete("/api/users/me")
@@ -86,7 +85,6 @@ class UserControllerIT extends AbstractIntegrationTest {
                 .andExpect(status().isNoContent());
 
         assertThat(userRepository.findById(TestFixtures.USER_ID)).isEmpty();
-        verify(keycloakAdminClient).deleteUser(TestFixtures.USER_ID);
     }
 
     @Test

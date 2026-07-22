@@ -30,17 +30,20 @@ public class WorkoutService {
     private final AchievementService achievementService;
     private final WorkoutMapper workoutMapper;
     private final PostRepository postRepository;
+    private final PostDeletionService postDeletionService;
 
     public WorkoutService(UserRepository userRepository,
                           WorkoutRepository workoutRepository,
                           AchievementService achievementService,
                           WorkoutMapper workoutMapper,
-                          PostRepository postRepository) {
+                          PostRepository postRepository,
+                          PostDeletionService postDeletionService) {
         this.userRepository = userRepository;
         this.workoutRepository = workoutRepository;
         this.achievementService = achievementService;
         this.workoutMapper = workoutMapper;
         this.postRepository = postRepository;
+        this.postDeletionService = postDeletionService;
     }
 
     @Transactional
@@ -87,7 +90,7 @@ public class WorkoutService {
             );
         }
 
-        relatedPost.ifPresent(postRepository::delete);
+        relatedPost.ifPresent(post -> postDeletionService.deleteOwnedPost(post.getId(), userId));
 
         workoutRepository.delete(workout);
     }
@@ -113,7 +116,7 @@ public class WorkoutService {
     public WorkoutResponse updateWorkout(UUID workoutId, UUID userId, WorkoutUpdateRequest request) {
         WorkoutEntity workout = findOwnedWorkout(workoutId, userId);
 
-        if (request.title() != null && !request.title().isBlank()) {
+        if (request.title() != null) {
             workout.setTitle(request.title());
         }
 

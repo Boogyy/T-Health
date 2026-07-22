@@ -4,22 +4,27 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
+import ru.innopolis.tbank.thealth.events.UserDeletedEvent;
 import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
 import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
+import ru.innopolis.tbank.thealth.repositories.CommentRepository;
 import ru.innopolis.tbank.thealth.repositories.FoodEntryRepository;
-import ru.innopolis.tbank.thealth.repositories.PostRepository;
 import ru.innopolis.tbank.thealth.repositories.RecipeRepository;
 import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
 import ru.innopolis.tbank.thealth.services.AchievementService;
-import ru.innopolis.tbank.thealth.services.KeycloakAdminClient;
+import ru.innopolis.tbank.thealth.services.CommunityDeletionService;
+import ru.innopolis.tbank.thealth.services.DirectChatDeletionService;
+import ru.innopolis.tbank.thealth.services.PostDeletionService;
 import ru.innopolis.tbank.thealth.services.UserService;
 import ru.innopolis.tbank.thealth.support.TestFixtures;
 
@@ -40,7 +45,7 @@ class UserServiceTest {
     @Mock
     private AchievementService achievementService;
     @Mock
-    private KeycloakAdminClient keycloakAdminClient;
+    private ApplicationEventPublisher eventPublisher;
     @Mock
     private WorkoutRepository workoutRepository;
     @Mock
@@ -50,7 +55,13 @@ class UserServiceTest {
     @Mock
     private RecipeRepository recipeRepository;
     @Mock
-    private PostRepository postRepository;
+    private CommentRepository commentRepository;
+    @Mock
+    private PostDeletionService postDeletionService;
+    @Mock
+    private CommunityDeletionService communityDeletionService;
+    @Mock
+    private DirectChatDeletionService directChatDeletionService;
 
     private UserService userService;
 
@@ -59,12 +70,15 @@ class UserServiceTest {
         userService = new UserService(
                 userRepository,
                 achievementService,
-                keycloakAdminClient,
+                eventPublisher,
                 workoutRepository,
                 foodEntryRepository,
                 userAchievementRepository,
                 recipeRepository,
-                postRepository
+                commentRepository,
+                postDeletionService,
+                communityDeletionService,
+                directChatDeletionService
         );
     }
 
@@ -152,20 +166,38 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Удаление профиля очищает зависимые данные и удаляет пользователя в Keycloak")
-    void deleteUser_shouldDeleteDependenciesAndKeycloakAccount() {
+    @DisplayName("Удаление профиля очищает локальный граф и публикует событие после flush")
+    void deleteUser_shouldDeleteLocalGraphAndPublishEvent() {
         UUID userId = TestFixtures.USER_ID;
         UserEntity user = TestFixtures.user(userId, "george");
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
         userService.deleteUser(TestFixtures.jwt(userId));
 
-        verify(postRepository).deleteAllByUser_KeycloakId(userId);
-        verify(workoutRepository).deleteAllByUser_KeycloakId(userId);
-        verify(foodEntryRepository).deleteAllByUser_KeycloakId(userId);
-        verify(recipeRepository).deleteAllByUser_KeycloakId(userId);
-        verify(userAchievementRepository).deleteAllByUser_KeycloakId(userId);
-        verify(userRepository).delete(user);
-        verify(keycloakAdminClient).deleteUser(userId);
+        InOrder inOrder = inOrder(
+                communityDeletionService,
+                directChatDeletionService,
+                commentRepository,
+                postDeletionService,
+                workoutRepository,
+                foodEntryRepository,
+                recipeRepository,
+                userAchievementRepository,
+                userRepository,
+                eventPublisher
+        );
+
+        inOrder.verify(communityDeletionService).deleteAllOwnedCommunities(userId);
+        inOrder.verify(communityDeletionService).removeUserFromOtherCommunities(userId);
+        inOrder.verify(directChatDeletionService).deleteAllChatsByUser(userId);
+        inOrder.verify(commentRepository).deleteAllByAuthor_KeycloakId(userId);
+        inOrder.verify(postDeletionService).deleteAllPostsByUser(userId);
+        inOrder.verify(workoutRepository).deleteAllByUser_KeycloakId(userId);
+        inOrder.verify(foodEntryRepository).deleteAllByUser_KeycloakId(userId);
+        inOrder.verify(recipeRepository).deleteAllByUser_KeycloakId(userId);
+        inOrder.verify(userAchievementRepository).deleteAllByUser_KeycloakId(userId);
+        inOrder.verify(userRepository).delete(user);
+        inOrder.verify(userRepository).flush();
+        inOrder.verify(eventPublisher).publishEvent(new UserDeletedEvent(userId));
     }
 }

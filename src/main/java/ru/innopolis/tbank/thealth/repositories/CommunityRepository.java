@@ -16,4 +16,6 @@ public interface CommunityRepository extends JpaRepository<CommunityEntity, UUID
     Optional<CommunityEntity> findByIdAndOwner_KeycloakId(UUID communityId, UUID ownerId);
 
     boolean existsByCommunityNameIgnoreCase(String communityName);
+
+    List<CommunityEntity> findAllByOwner_KeycloakId(UUID ownerId);
 }

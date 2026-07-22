@@ -40,24 +40,24 @@ public class CommunityService {
     private final CommunityMemberRepository communityMemberRepository;
     private final UserRepository userRepository;
     private final PostRepository postRepository;
-    private final CommentRepository commentRepository;
     private final CommunityMapper communityMapper;
     private final PostMapper postMapper;
+    private final CommunityDeletionService communityDeletionService;
 
     public CommunityService(CommunityRepository communityRepository,
                             CommunityMemberRepository communityMemberRepository,
                             UserRepository userRepository,
                             PostRepository postRepository,
-                            CommentRepository commentRepository,
                             CommunityMapper communityMapper,
-                            PostMapper postMapper) {
+                            PostMapper postMapper,
+                            CommunityDeletionService communityDeletionService) {
         this.communityRepository = communityRepository;
         this.communityMemberRepository = communityMemberRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
-        this.commentRepository = commentRepository;
         this.communityMapper = communityMapper;
         this.postMapper = postMapper;
+        this.communityDeletionService = communityDeletionService;
     }
 
     @Transactional(readOnly = true)
@@ -138,20 +138,18 @@ public class CommunityService {
         return toCommunityResponse(community, currentUserId);
     }
 
+
     @Transactional
-    public void deleteCommunity(UUID communityId, UUID currentUserId) {
+    public void deleteCommunity(
+            UUID communityId,
+            UUID currentUserId
+    ) {
         CommunityEntity community = findCommunity(communityId);
+
         checkOwner(community, currentUserId);
 
-        List<PostEntity> communityPosts = postRepository.findAllByCommunity_IdOrderByCreatedAtDesc(communityId);
-
-        for (PostEntity post : communityPosts) {
-            commentRepository.deleteAllByPost_Id(post.getId());
-        }
-
-        postRepository.deleteAllByCommunity_Id(communityId);
-        communityMemberRepository.deleteAllByCommunity_Id(communityId);
-        communityRepository.delete(community);
+        communityDeletionService
+                .deleteCommunityWithRelations(community);
     }
 
     @Transactional
@@ -189,20 +187,32 @@ public class CommunityService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommunityMemberResponse> getCommunityMembers(UUID communityId) {
-        findCommunity(communityId);
+    public List<CommunityMemberResponse> getCommunityMembers(
+            UUID communityId,
+            UUID currentUserId
+    ) {
+        CommunityEntity community = findCommunity(communityId);
 
-        return communityMemberRepository.findAllByCommunity_IdOrderByJoinedAtDesc(communityId)
+        checkMember(community, currentUserId);
+
+        return communityMemberRepository
+                .findAllByCommunity_IdOrderByJoinedAtDesc(communityId)
                 .stream()
                 .map(communityMapper::toCommunityMemberResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<PostResponse> getCommunityPosts(UUID communityId) {
-        findCommunity(communityId);
+    public List<PostResponse> getCommunityPosts(
+            UUID communityId,
+            UUID currentUserId
+    ) {
+        CommunityEntity community = findCommunity(communityId);
 
-        return postRepository.findAllByCommunity_IdOrderByCreatedAtDesc(communityId)
+        checkMember(community, currentUserId);
+
+        return postRepository
+                .findAllByCommunity_IdOrderByCreatedAtDesc(communityId)
                 .stream()
                 .map(postMapper::toPostResponse)
                 .toList();
@@ -217,9 +227,7 @@ public class CommunityService {
         CommunityEntity community = findCommunity(communityId);
         UserEntity user = findUser(currentUserId);
 
-        if (!communityMemberRepository.existsByCommunity_IdAndUser_KeycloakId(communityId, currentUserId)) {
-            throw new CommunityMemberNotFoundException(communityId);
-        }
+        checkMember(community, currentUserId);
 
         PostEntity post = new PostEntity();
         post.setUser(user);
@@ -247,6 +255,27 @@ public class CommunityService {
     private void checkOwner(CommunityEntity community, UUID currentUserId) {
         if (!community.getOwner().getKeycloakId().equals(currentUserId)) {
             throw new AccessDeniedException("Only community owner can perform this action");
+        }
+    }
+
+    private void checkMember(
+            CommunityEntity community,
+            UUID currentUserId
+    ) {
+        boolean isOwner = community.getOwner()
+                .getKeycloakId()
+                .equals(currentUserId);
+
+        boolean isMember = communityMemberRepository
+                .existsByCommunity_IdAndUser_KeycloakId(
+                        community.getId(),
+                        currentUserId
+                );
+
+        if (!isOwner && !isMember) {
+            throw new AccessDeniedException(
+                    "Only community members can access this resource"
+            );
         }
     }
 

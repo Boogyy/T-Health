@@ -520,12 +520,20 @@ import './styles.css';
     renderRoute(false);
 
     try {
-      const [user, community, members, posts] = await Promise.all([
+      const [user, community] = await Promise.all([
         getCurrentUser(),
         apiFetch(`/api/communities/${encodeURIComponent(id)}`),
-        apiFetch(`/api/communities/${encodeURIComponent(id)}/members`),
-        apiFetch(`/api/communities/${encodeURIComponent(id)}/posts`),
       ]);
+
+      let members = [];
+      let posts = [];
+
+      if (community.currentUserMember) {
+        [members, posts] = await Promise.all([
+          apiFetch(`/api/communities/${encodeURIComponent(id)}/members`),
+          apiFetch(`/api/communities/${encodeURIComponent(id)}/posts`),
+        ]);
+      }
 
       state.user = user;
       state.communityDetails[id] = community;
@@ -2302,15 +2310,9 @@ import './styles.css';
         <div class="member-info">
           <strong>
             ${escapeHtml(
-              member.username ||
-                member.email ||
-                'Пользователь'
+              member.username || 'Пользователь'
             )}
           </strong>
-
-          <span>
-            ${escapeHtml(member.email || '')}
-          </span>
 
           <small>
             ${communityRoleLabel(member.role)}
@@ -4546,7 +4548,6 @@ import './styles.css';
     const source =
       fullName ||
       member?.username ||
-      member?.email ||
       'П';
 
     return source

@@ -33,10 +33,7 @@ public class CommunityMapper {
         UserEntity user = communityMember.getUser();
 
         return new CommunityMemberResponse(
-                communityMember.getId(),
-                communityMember.getCommunity().getId(),
                 user.getKeycloakId(),
-                user.getEmail(),
                 user.getUsername(),
                 communityMember.getRole(),
                 communityMember.getJoinedAt()

@@ -17,7 +17,6 @@ import ru.innopolis.tbank.thealth.entities.WorkoutEntity;
 import ru.innopolis.tbank.thealth.enums.PostType;
 import ru.innopolis.tbank.thealth.enums.PostVisibility;
 import ru.innopolis.tbank.thealth.exceptions.ConflictException;
-import ru.innopolis.tbank.thealth.exceptions.PostNotFoundException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
 import ru.innopolis.tbank.thealth.mappers.AchievementMapper;
 import ru.innopolis.tbank.thealth.mappers.PostMapper;
@@ -28,6 +27,7 @@ import ru.innopolis.tbank.thealth.repositories.RecipeRepository;
 import ru.innopolis.tbank.thealth.repositories.UserAchievementRepository;
 import ru.innopolis.tbank.thealth.repositories.UserRepository;
 import ru.innopolis.tbank.thealth.repositories.WorkoutRepository;
+import ru.innopolis.tbank.thealth.services.PostDeletionService;
 import ru.innopolis.tbank.thealth.services.PostService;
 import ru.innopolis.tbank.thealth.services.RecipeService;
 import ru.innopolis.tbank.thealth.services.WorkoutService;
@@ -60,6 +60,8 @@ class PostServiceTest {
     private WorkoutService workoutService;
     @Mock
     private RecipeService recipeService;
+    @Mock
+    private PostDeletionService postDeletionService;
 
     private PostService postService;
 
@@ -78,7 +80,8 @@ class PostServiceTest {
                 recipeRepository,
                 postMapper,
                 workoutService,
-                recipeService
+                recipeService,
+                postDeletionService
         );
     }
 
@@ -202,16 +205,13 @@ class PostServiceTest {
     }
 
     @Test
-    @DisplayName("Удалить можно только собственный пост")
-    void deletePost_whenNotOwned_shouldThrowNotFound() {
+    @DisplayName("Удаление поста делегируется PostDeletionService с id текущего пользователя")
+    void deletePost_shouldDelegateToPostDeletionService() {
         UUID postId = UUID.randomUUID();
-        when(postRepository.findByIdAndUser_KeycloakId(postId, TestFixtures.USER_ID))
-                .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> postService.deletePostById(TestFixtures.jwt(TestFixtures.USER_ID), postId))
-                .isInstanceOf(PostNotFoundException.class);
+        postService.deletePostById(TestFixtures.jwt(TestFixtures.USER_ID), postId);
 
-        verify(postRepository, never()).delete(any());
+        verify(postDeletionService).deleteOwnedPost(postId, TestFixtures.USER_ID);
     }
 
     @Test

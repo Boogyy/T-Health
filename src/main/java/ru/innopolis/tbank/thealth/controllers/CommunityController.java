@@ -264,47 +264,97 @@ public class CommunityController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Получить участников сообщества")
+    @Operation(
+            summary = "Получить участников сообщества",
+            description = "Доступно только участникам сообщества"
+    )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Список участников получен"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Список участников получен"
+            ),
             @ApiResponse(
                     responseCode = "401",
                     description = "Пользователь не авторизован",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Пользователь не состоит в сообществе",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "Сообщество не найдено",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
             )
     })
     @GetMapping("/{id}/members")
     public ResponseEntity<List<CommunityMemberResponse>> getCommunityMembers(
-            @PathVariable("id") UUID communityId
+            @PathVariable("id") UUID communityId,
+            @AuthenticationPrincipal Jwt jwt
     ) {
-        var result = communityService.getCommunityMembers(communityId);
+        UUID currentUserId = getUserId(jwt);
+        var result = communityService.getCommunityMembers(communityId, currentUserId);
         return ResponseEntity.ok(result);
     }
 
-    @Operation(summary = "Получить посты сообщества")
+    @Operation(
+            summary = "Получить посты сообщества",
+            description = "Доступно только участникам сообщества"
+    )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Посты сообщества получены"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Посты сообщества получены"
+            ),
             @ApiResponse(
                     responseCode = "401",
                     description = "Пользователь не авторизован",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Пользователь не состоит в сообществе",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "Сообщество не найдено",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
             )
     })
     @GetMapping("/{id}/posts")
     public ResponseEntity<List<PostResponse>> getCommunityPosts(
-            @PathVariable("id") UUID communityId
+            @PathVariable("id") UUID communityId,
+            @AuthenticationPrincipal Jwt jwt
     ) {
-        var result = communityService.getCommunityPosts(communityId);
+        UUID currentUserId = getUserId(jwt);
+        var result = communityService.getCommunityPosts(communityId, currentUserId);
         return ResponseEntity.ok(result);
     }
 
@@ -322,9 +372,22 @@ public class CommunityController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
+                    responseCode = "403",
+                    description = "Пользователь не состоит в сообществе",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
                     responseCode = "404",
-                    description = "Сообщество не найдено или пользователь не состоит в сообществе",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+                    description = "Сообщество не найдено",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
             )
     })
     @PostMapping("/{id}/posts/text")

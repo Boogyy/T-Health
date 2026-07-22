@@ -1,11 +1,13 @@
 package ru.innopolis.tbank.thealth.services;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
 import ru.innopolis.tbank.thealth.entities.UserEntity;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
+import ru.innopolis.tbank.thealth.events.UserDeletedEvent;
 import ru.innopolis.tbank.thealth.exceptions.DuplicateUsernameException;
 import ru.innopolis.tbank.thealth.exceptions.MissingTokenClaimException;
 import ru.innopolis.tbank.thealth.exceptions.UserNotFoundException;
@@ -19,31 +21,42 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AchievementService achievementService;
-    private final KeycloakAdminClient keycloakAdminClient;
+    private final ApplicationEventPublisher eventPublisher;
     private final WorkoutRepository workoutRepository;
     private final FoodEntryRepository foodEntryRepository;
     private final UserAchievementRepository userAchievementRepository;
     private final RecipeRepository recipeRepository;
-    private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
+    private final PostDeletionService postDeletionService;
+    private final CommunityDeletionService communityDeletionService;
+    private final DirectChatDeletionService directChatDeletionService;
 
 
 
     public UserService (
             UserRepository userRepository,
             AchievementService achievementService,
-            KeycloakAdminClient keycloakAdminClient,
+            ApplicationEventPublisher eventPublisher,
             WorkoutRepository workoutRepository,
             FoodEntryRepository foodEntryRepository,
-            UserAchievementRepository userAchievementRepository, RecipeRepository recipeRepository, PostRepository postRepository
+            UserAchievementRepository userAchievementRepository,
+            RecipeRepository recipeRepository,
+            CommentRepository commentRepository,
+            PostDeletionService postDeletionService,
+            CommunityDeletionService communityDeletionService,
+            DirectChatDeletionService directChatDeletionService
     ) {
         this.userRepository = userRepository;
         this.achievementService = achievementService;
-        this.keycloakAdminClient = keycloakAdminClient;
+        this.eventPublisher = eventPublisher;
         this.workoutRepository = workoutRepository;
         this.foodEntryRepository = foodEntryRepository;
         this.userAchievementRepository = userAchievementRepository;
         this.recipeRepository = recipeRepository;
-        this.postRepository = postRepository;
+        this.commentRepository = commentRepository;
+        this.postDeletionService = postDeletionService;
+        this.communityDeletionService = communityDeletionService;
+        this.directChatDeletionService = directChatDeletionService;
     }
 
     @Transactional
@@ -62,7 +75,7 @@ public class UserService {
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
-        if (request.username() != null && !request.username().isBlank()) {
+        if (request.username() != null) {
             if (!request.username().equals(user.getUsername())
                     && userRepository.existsByUsername(request.username())) {
                 throw new DuplicateUsernameException(request.username());
@@ -98,11 +111,14 @@ public class UserService {
         String username = jwt.getClaimAsString("preferred_username");
 
         if (email == null || email.isBlank()) {
-            throw new MissingTokenClaimException(email);
+            throw new MissingTokenClaimException("email");
         }
 
         if (username == null || username.isBlank()) {
-            username = "user_" + keycloakId;
+            username = "user_" +
+                    keycloakId.toString()
+                            .replace("-", "")
+                            .substring(0, 16);
         }
 
         UserEntity newUser = new UserEntity();
@@ -129,7 +145,26 @@ public class UserService {
         UserEntity user = userRepository.findById(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
 
-        postRepository.deleteAllByUser_KeycloakId(keycloakId);
+        /*
+         * Сообщества пользователя-владельца:
+         * посты всех участников, комментарии, memberships
+         */
+        communityDeletionService
+                .deleteAllOwnedCommunities(keycloakId);
+
+        //membership пользователя в сообществах других владельцев
+        communityDeletionService
+                .removeUserFromOtherCommunities(keycloakId);
+
+        // Личные чаты пользователя и все сообщения этих чатов
+        directChatDeletionService
+                .deleteAllChatsByUser(keycloakId);
+
+        // Комментарии пользователя под чужими и собственными постами
+        commentRepository.deleteAllByAuthor_KeycloakId(keycloakId);
+
+        // Все посты пользователя и оставшиеся комментарии других пользователей под этими постами
+        postDeletionService.deleteAllPostsByUser(keycloakId);
 
         workoutRepository.deleteAllByUser_KeycloakId(keycloakId);
         foodEntryRepository.deleteAllByUser_KeycloakId(keycloakId);
@@ -138,7 +173,9 @@ public class UserService {
 
         userRepository.delete(user);
 
-        keycloakAdminClient.deleteUser(keycloakId);
+        userRepository.flush();
+
+        eventPublisher.publishEvent(new UserDeletedEvent(keycloakId));
     }
 
 }

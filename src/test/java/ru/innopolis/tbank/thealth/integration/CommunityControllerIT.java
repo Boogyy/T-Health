@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -122,7 +123,7 @@ class CommunityControllerIT extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("Неучастник не может создать пост в сообществе")
-    void createCommunityPost_nonMember_returnsNotFound() throws Exception {
+    void createCommunityPost_nonMember_returnsForbidden() throws Exception {
         UserEntity owner = persistUser(OWNER_ID, "community-owner");
         persistUser(MEMBER_ID, "community-stranger");
         CommunityEntity community = saveCommunity(owner, "Йога");
@@ -136,8 +137,34 @@ class CommunityControllerIT extends AbstractIntegrationTest {
                                   "content": "Кто идет сегодня?"
                                 }
                                 """))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status").value(404));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    @DisplayName("Неучастник не может получить список участников сообщества")
+    void getCommunityMembers_nonMember_returnsForbidden() throws Exception {
+        UserEntity owner = persistUser(OWNER_ID, "community-owner");
+        persistUser(MEMBER_ID, "community-stranger");
+        CommunityEntity community = saveCommunity(owner, "Закрытый клуб");
+
+        mockMvc.perform(get("/api/communities/{id}/members", community.getId())
+                        .with(jwtFor(MEMBER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    @DisplayName("Неучастник не может получить посты сообщества")
+    void getCommunityPosts_nonMember_returnsForbidden() throws Exception {
+        UserEntity owner = persistUser(OWNER_ID, "community-owner");
+        persistUser(MEMBER_ID, "community-stranger");
+        CommunityEntity community = saveCommunity(owner, "Закрытые посты");
+
+        mockMvc.perform(get("/api/communities/{id}/posts", community.getId())
+                        .with(jwtFor(MEMBER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
     }
 
     @Test

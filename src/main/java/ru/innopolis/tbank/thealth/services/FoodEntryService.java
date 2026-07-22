@@ -78,7 +78,7 @@ public class FoodEntryService {
     ) {
         FoodEntryEntity foodEntry = findOwnedFoodEntry(foodEntryId, userId);
 
-        if (request.mealName() != null && !request.mealName().isBlank()) {
+        if (request.mealName() != null) {
             foodEntry.setMealName(request.mealName());
         }
 

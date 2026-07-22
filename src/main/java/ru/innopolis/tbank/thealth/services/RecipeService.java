@@ -28,15 +28,18 @@ public class RecipeService {
     private final RecipeRepository recipeRepository;
     private final RecipeMapper recipeMapper;
     private final PostRepository postRepository;
+    private final PostDeletionService postDeletionService;
 
     public RecipeService(UserRepository userRepository,
                          RecipeRepository recipeRepository,
                          RecipeMapper recipeMapper,
-                         PostRepository postRepository) {
+                         PostRepository postRepository,
+                         PostDeletionService postDeletionService) {
         this.userRepository = userRepository;
         this.recipeRepository = recipeRepository;
         this.recipeMapper = recipeMapper;
         this.postRepository = postRepository;
+        this.postDeletionService = postDeletionService;
     }
 
 
@@ -83,23 +86,23 @@ public class RecipeService {
         RecipeEntity recipe = recipeRepository.findByIdAndUser_KeycloakId(recipeId, userId)
                 .orElseThrow(() -> new RecipeNotFoundException(recipeId));
 
-        if (recipeUpdateRequest.title() != null && !recipeUpdateRequest.title().isBlank()) {
+        if (recipeUpdateRequest.title() != null) {
             recipe.setTitle(recipeUpdateRequest.title());
         }
 
-        if (recipeUpdateRequest.description() != null && !recipeUpdateRequest.description().isBlank()) {
+        if (recipeUpdateRequest.description() != null) {
             recipe.setDescription(recipeUpdateRequest.description());
         }
 
-        if (recipeUpdateRequest.ingredients() != null && !recipeUpdateRequest.ingredients().isBlank()) {
+        if (recipeUpdateRequest.ingredients() != null) {
             recipe.setIngredients(recipeUpdateRequest.ingredients());
         }
 
-        if (recipeUpdateRequest.cookingSteps() != null && !recipeUpdateRequest.cookingSteps().isBlank()) {
+        if (recipeUpdateRequest.cookingSteps() != null) {
             recipe.setCookingSteps(recipeUpdateRequest.cookingSteps());
         }
 
-        if (recipeUpdateRequest.imageUrl() != null && !recipeUpdateRequest.imageUrl().isBlank()) {
+        if (recipeUpdateRequest.imageUrl() != null) {
             recipe.setImageUrl(recipeUpdateRequest.imageUrl());
         }
 
@@ -144,7 +147,8 @@ public class RecipeService {
 
     @Transactional
     public void deleteById(Jwt jwt, UUID id, boolean deleteRelatedPost) {
-        RecipeEntity recipeToDelete = findOwnedRecipe(id, getId(jwt));
+        UUID userId = getId(jwt);
+        RecipeEntity recipeToDelete = findOwnedRecipe(id, userId);
 
         Optional<PostEntity> relatedPost = postRepository.findByRecipe_Id(id);
 
@@ -154,7 +158,9 @@ public class RecipeService {
             );
         }
 
-        relatedPost.ifPresent(postRepository::delete);
+        relatedPost.ifPresent(post ->
+                postDeletionService.deleteOwnedPost(post.getId(), userId)
+        );
 
         recipeRepository.delete(recipeToDelete);
     }

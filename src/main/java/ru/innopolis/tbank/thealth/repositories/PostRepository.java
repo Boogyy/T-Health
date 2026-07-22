@@ -47,4 +47,8 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
     void deleteAllByUser_KeycloakId(UUID keycloakId);
 
     void deleteAllByCommunity_Id(UUID communityId);
+
+    List<PostEntity> findAllByUser_KeycloakId(UUID userId);
+
+    List<PostEntity> findAllByCommunity_Id(UUID communityId);
 }
