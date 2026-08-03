@@ -23,6 +23,19 @@ public interface PostRepository extends JpaRepository<PostEntity, UUID> {
     })
     List<PostEntity> findAllByVisibilityOrderByCreatedAtDesc(PostVisibility visibility);
 
+    @EntityGraph(attributePaths = {
+            "user",
+            "workout",
+            "workout.user",
+            "recipe",
+            "recipe.user",
+            "userAchievement",
+            "userAchievement.user",
+            "userAchievement.achievement",
+            "community"
+    })
+    List<PostEntity> findAllByUser_KeycloakIdAndVisibilityOrderByCreatedAtDesc(UUID userId, PostVisibility visibility);
+
     List<PostEntity> findAllByVisibilityAndPostTypeOrderByCreatedAtDesc(PostVisibility visibility, PostType type);
 
     List<PostEntity> findAllByUser_KeycloakIdOrderByCreatedAtDesc(UUID userId);

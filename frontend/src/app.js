@@ -56,6 +56,12 @@ import './styles.css';
     publicPostDetails: {},
     publicPostLoadingIds: new Set(),
 
+    // Username используется как ключ. Объекты без прототипа не конфликтуют
+    // со специальными именами вроде "__proto__" и "constructor".
+    publicUserProfiles: Object.create(null),
+    publicUserProfileErrors: Object.create(null),
+    publicUserProfileLoadingNames: new Set(),
+
     chats: null,
     chatMessages: {},
 
@@ -702,6 +708,96 @@ import './styles.css';
 
     state.chats = null;
     state.chatMessages = {};
+
+    state.publicUserProfiles = Object.create(null);
+    state.publicUserProfileErrors = Object.create(null);
+    state.publicUserProfileLoadingNames.clear();
+  }
+
+  async function loadPublicUserProfile(
+      username,
+      force = false
+  ) {
+    const exactUsername = String(username || '');
+
+    const profileLoaded =
+        Object.prototype.hasOwnProperty.call(
+            state.publicUserProfiles,
+            exactUsername
+        );
+
+    const errorLoaded =
+        Object.prototype.hasOwnProperty.call(
+            state.publicUserProfileErrors,
+            exactUsername
+        );
+
+    if (
+        (profileLoaded || errorLoaded) &&
+        !force
+    ) {
+      return;
+    }
+
+    if (
+        state.publicUserProfileLoadingNames.has(
+            exactUsername
+        )
+    ) {
+      return;
+    }
+
+    // Не переносим глобальную ошибку с предыдущего экрана на профиль.
+    state.error = null;
+
+    state.publicUserProfileLoadingNames.add(
+        exactUsername
+    );
+
+    delete state.publicUserProfileErrors[
+        exactUsername
+        ];
+
+    if (force) {
+      delete state.publicUserProfiles[
+          exactUsername
+          ];
+    }
+
+    renderRoute(false);
+
+    try {
+      const [currentUser, profile] =
+          await Promise.all([
+            getCurrentUser(),
+            apiFetch(
+                `/api/users/public/${encodeURIComponent(
+                    exactUsername
+                )}`
+            ),
+          ]);
+
+      state.user = currentUser;
+
+      state.publicUserProfiles[
+          exactUsername
+          ] = profile;
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        navigate('/login');
+        return;
+      }
+
+      state.publicUserProfileErrors[
+          exactUsername
+          ] = friendlyError(error);
+    } finally {
+      state.publicUserProfileLoadingNames.delete(
+          exactUsername
+      );
+
+      renderRoute(false);
+    }
   }
 
   function logout() {
@@ -774,6 +870,35 @@ import './styles.css';
     if (parts[0] === 'achievements') {
       renderProtected(renderAchievementsRoute(parts));
       if (!state.achievements) loadDashboard();
+      return;
+    }
+
+    if (
+        parts[0] === 'users' &&
+        parts[1]
+    ) {
+      const username = parts[1];
+
+      renderProtected(
+          renderPublicUserProfile(username)
+      );
+
+      const profileLoaded =
+          Object.prototype.hasOwnProperty.call(
+              state.publicUserProfiles,
+              username
+          );
+
+      const errorLoaded =
+          Object.prototype.hasOwnProperty.call(
+              state.publicUserProfileErrors,
+              username
+          );
+
+      if (!profileLoaded && !errorLoaded) {
+        loadPublicUserProfile(username);
+      }
+
       return;
     }
 
@@ -1590,7 +1715,10 @@ import './styles.css';
           <div>
             <span class="badge">${postTypeLabel(type)}</span>
             <h3>${escapeHtml(title)}</h3>
-            <p class="muted">${escapeHtml(post.username || 'Пользователь')} · ${formatDateTime(post.createdAt)}</p>
+            <p class="muted">
+              ${publicUserLink(post.username)}
+              · ${formatDateTime(post.createdAt)}
+            </p>
           </div>
         </div>
         ${post.content ? `<p>${escapeHtml(post.content)}</p>` : ''}
@@ -1665,7 +1793,10 @@ import './styles.css';
               <div>
                 <span class="badge">${postTypeLabel(type)}</span>
                 <h1 id="public-post-title">${escapeHtml(post.title || 'Публикация')}</h1>
-                <p class="muted">${escapeHtml(post.username || 'Пользователь')} · ${formatDateTime(post.createdAt)}</p>
+                <p class="muted">
+                  ${publicUserLink(post.username)}
+                  · ${formatDateTime(post.createdAt)}
+                </p>
               </div>
             </div>
 
@@ -2255,11 +2386,8 @@ import './styles.css';
             </h3>
 
             <p class="muted">
-              ${escapeHtml(
-                post.username || 'Пользователь'
-              )}
-              ·
-              ${formatDateTime(post.createdAt)}
+              ${publicUserLink(post.username)}
+              · ${formatDateTime(post.createdAt)}
             </p>
           </div>
         </div>
@@ -2297,49 +2425,63 @@ import './styles.css';
     `;
   }
 
+
   function communityMemberRow(community, member) {
     const isCurrent =
       String(member.userId) === String(state.user?.id);
 
+    const username = String(member.username || '');
+    const displayUsername = username || 'Пользователь';
+
+    const memberIdentity = `
+      <div class="member-avatar">
+        ${escapeHtml(getMemberInitials(member))}
+      </div>
+
+      <div class="member-info">
+        <strong>${escapeHtml(displayUsername)}</strong>
+        <small>
+          ${communityRoleLabel(member.role)}
+          · с ${formatDateShort(member.joinedAt)}
+        </small>
+      </div>
+    `;
+
+    const memberProfile = username
+      ? `
+          <a
+            class="member-profile-link"
+            href="#/users/${encodeURIComponent(username)}"
+            aria-label="Открыть профиль ${escapeHtml(username)}"
+          >
+            ${memberIdentity}
+          </a>
+        `
+      : `
+          <div class="member-profile-link">
+            ${memberIdentity}
+          </div>
+        `;
+
     return `
       <div class="member-row">
-        <div class="member-avatar">
-          ${escapeHtml(getMemberInitials(member))}
-        </div>
-
-        <div class="member-info">
-          <strong>
-            ${escapeHtml(
-              member.username || 'Пользователь'
-            )}
-          </strong>
-
-          <small>
-            ${communityRoleLabel(member.role)}
-            · с ${formatDateShort(member.joinedAt)}
-          </small>
-        </div>
+        ${memberProfile}
 
         ${
           !isCurrent
             ? `
-              <button
-                class="icon-btn"
-                type="button"
-                data-start-chat="${escapeHtml(member.userId)}"
-                title="Начать личный чат"
-                aria-label="Написать ${escapeHtml(
-                  member.username || 'участнику'
-                )}"
-              >
-                💬
-              </button>
-            `
+                <button
+                  class="icon-btn"
+                  type="button"
+                  data-start-chat="${escapeHtml(member.userId)}"
+                  title="Начать личный чат"
+                >
+                  💬
+                </button>
+              `
             : `
-              <span class="badge">
-                Вы
-              </span>
-            `
+                <span class="badge">Вы</span>
+              `
         }
       </div>
     `;
@@ -2588,11 +2730,8 @@ import './styles.css';
           </h1>
 
           <p>
-            ${escapeHtml(
-              post.username || 'Пользователь'
-            )}
-            ·
-            ${formatDateTime(post.createdAt)}
+            ${publicUserLink(post.username)}
+            · ${formatDateTime(post.createdAt)}
           </p>
         </div>
 
@@ -2987,10 +3126,45 @@ import './styles.css';
     const messages =
       state.chatMessages[chatId] || [];
 
+    const companionUsername = String(
+      chat?.companionUsername || ''
+    );
+
     const companion =
-      chat?.companionUsername ||
+      companionUsername ||
       chat?.companionEmail ||
       'Собеседник';
+
+    const companionIdentity = `
+      <div class="chat-avatar">
+        ${escapeHtml(getChatInitials(chat))}
+      </div>
+
+      <div>
+        <h2>${escapeHtml(companion)}</h2>
+        <p>
+          ${escapeHtml(
+            chat?.companionEmail || 'Личный чат'
+          )}
+        </p>
+      </div>
+    `;
+
+    const companionProfile = companionUsername
+      ? `
+          <a
+            class="chat-person chat-person-link"
+            href="#/users/${encodeURIComponent(companionUsername)}"
+            aria-label="Открыть профиль ${escapeHtml(companionUsername)}"
+          >
+            ${companionIdentity}
+          </a>
+        `
+      : `
+          <div class="chat-person">
+            ${companionIdentity}
+          </div>
+        `;
 
     return `
       ${flashHtml()}
@@ -3005,23 +3179,7 @@ import './styles.css';
           ← Все чаты
         </a>
 
-        <div class="chat-person">
-          <div class="chat-avatar">
-            ${escapeHtml(getChatInitials(chat))}
-          </div>
-
-          <div>
-            <h2>
-              ${escapeHtml(companion)}
-            </h2>
-
-            <p>
-              ${escapeHtml(
-                chat?.companionEmail || 'Личный чат'
-              )}
-            </p>
-          </div>
-        </div>
+        ${companionProfile}
 
         <button
           class="btn ghost"
@@ -3275,12 +3433,42 @@ import './styles.css';
         navigate(`/feed/${card.dataset.openPublicPost}`);
       };
 
-      card.addEventListener('click', open);
-      card.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        open();
-      });
+      card.addEventListener(
+          'click',
+          (event) => {
+            if (
+                event.target.closest(
+                    'a, button, input, textarea, select'
+                )
+            ) {
+              return;
+            }
+
+            open();
+          }
+      );
+      card.addEventListener(
+          'keydown',
+          (event) => {
+            if (
+                event.target.closest(
+                    'a, button, input, textarea, select'
+                )
+            ) {
+              return;
+            }
+
+            if (
+                event.key !== 'Enter' &&
+                event.key !== ' '
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            open();
+          }
+      );
     });
 
     app.querySelectorAll('[data-close-public-post]').forEach((overlay) => {
@@ -3430,6 +3618,23 @@ import './styles.css';
   async function reloadCurrentSection() {
     state.error = null;
     const parts = routeParts();
+    if (
+        parts[0] === 'users' &&
+        parts[1]
+    ) {
+      const username = parts[1];
+
+      delete state.publicUserProfiles[username];
+      delete state.publicUserProfileErrors[username];
+
+      await loadPublicUserProfile(
+          username,
+          true
+      );
+
+      return;
+    }
+
     if (parts[0] === 'feed') {
       if (parts[1] && parts[1] !== 'new') {
         const postId = String(parts[1]);
@@ -4147,6 +4352,711 @@ import './styles.css';
       state.error = friendlyError(error);
       renderRoute(false);
     }
+  }
+
+  function renderPublicUserProfile(username) {
+
+    const exactUsername =
+
+        String(username || '');
+
+
+
+    const profile =
+
+        state.publicUserProfiles[exactUsername];
+
+
+
+    const error =
+
+        state.publicUserProfileErrors[exactUsername];
+
+
+
+    const loading =
+
+        state.publicUserProfileLoadingNames.has(
+
+            exactUsername
+
+        );
+
+
+
+    if (error && !profile) {
+
+      return (
+
+          pageHeader(
+
+              'Профиль пользователя',
+
+              'Не удалось получить публичные данные.'
+
+          ) +
+
+          alertHtml('error', error)
+
+      );
+
+    }
+
+
+
+    if (!profile || loading) {
+
+      return (
+
+          pageHeader(
+
+              'Профиль пользователя',
+
+              'Загружаем публичные публикации и сообщества.'
+
+          ) +
+
+          skeletonGrid()
+
+      );
+
+    }
+
+
+
+    const publications =
+
+        Array.isArray(profile.publications)
+
+            ? profile.publications
+
+            : [];
+
+
+
+    const communities =
+
+        Array.isArray(profile.communities)
+
+            ? profile.communities
+
+            : [];
+
+
+
+    const textPosts = publications.filter(
+
+        (post) =>
+
+            normalizedPostType(post) === 'TEXT'
+
+    );
+
+
+
+    const workouts = publications.filter(
+
+        (post) =>
+
+            normalizedPostType(post) === 'WORKOUT'
+
+    );
+
+
+
+    const recipes = publications.filter(
+
+        (post) =>
+
+            normalizedPostType(post) === 'RECIPE'
+
+    );
+
+
+
+    const achievements = publications.filter(
+
+        (post) =>
+
+            normalizedPostType(post) ===
+
+            'ACHIEVEMENT'
+
+    );
+
+
+
+    const isCurrentUser =
+
+        String(profile.userId) ===
+
+        String(state.user?.id);
+
+
+
+    const fullName = [
+
+      profile.firstName,
+
+      profile.lastName,
+
+    ]
+
+        .filter(Boolean)
+
+        .join(' ');
+
+
+
+    return `
+
+    ${flashHtml()}
+    ${state.error ? alertHtml('error', state.error) : ''}
+
+    <section class="public-user-header">
+
+      <div class="public-user-avatar">
+
+        ${escapeHtml(getInitials(profile))}
+
+      </div>
+
+
+
+      <div class="public-user-identity">
+
+        <p class="eyebrow">
+
+          Публичный профиль
+
+        </p>
+
+
+
+        <h1>
+
+          ${escapeHtml(profile.username)}
+
+        </h1>
+
+
+
+        <p>
+
+          ${escapeHtml(
+
+        fullName ||
+
+        'Пользователь Т-Здоровья'
+
+    )}
+
+        </p>
+
+
+
+        <small>
+
+          В Т-Здоровье с
+
+          ${formatDateShort(profile.memberSince)}
+
+        </small>
+
+      </div>
+
+
+
+      <div class="public-user-actions">
+
+        ${
+
+        isCurrentUser
+
+            ? `
+
+              <a
+
+                class="btn"
+
+                href="#/profile"
+
+              >
+
+                Мой профиль
+
+              </a>
+
+            `
+
+            : `
+
+              <button
+
+                class="btn"
+
+                type="button"
+
+                data-start-chat="${escapeHtml(
+
+                profile.userId
+
+            )}"
+
+              >
+
+                Написать
+
+              </button>
+
+            `
+
+    }
+
+      </div>
+
+    </section>
+
+
+
+    <section class="public-user-stats">
+
+      ${publicUserStatCard(
+
+        '🏃',
+
+        'Тренировки',
+
+        workouts.length
+
+    )}
+
+
+
+      ${publicUserStatCard(
+
+        '🍳',
+
+        'Рецепты',
+
+        recipes.length
+
+    )}
+
+
+
+      ${publicUserStatCard(
+
+        '🏅',
+
+        'Достижения',
+
+        achievements.length
+
+    )}
+
+
+
+      ${publicUserStatCard(
+
+        '👥',
+
+        'Сообщества',
+
+        communities.length
+
+    )}
+
+    </section>
+
+
+
+    <section class="public-user-layout">
+
+      <div class="public-user-publications">
+
+        ${publicUserPublicationSection(
+
+        'Тренировки',
+
+        'Опубликованные тренировки пользователя.',
+
+        workouts
+
+    )}
+
+
+
+        ${publicUserPublicationSection(
+
+        'Рецепты',
+
+        'Рецепты из публичной ленты.',
+
+        recipes
+
+    )}
+
+
+
+        ${publicUserPublicationSection(
+
+        'Достижения',
+
+        'Опубликованные достижения.',
+
+        achievements
+
+    )}
+
+
+
+        ${publicUserPublicationSection(
+
+        'Текстовые публикации',
+
+        'Обычные публичные посты.',
+
+        textPosts
+
+    )}
+
+      </div>
+
+
+
+      <aside class="public-user-communities">
+
+        <div class="subsection-heading">
+
+          <div>
+
+            <h2>Сообщества</h2>
+
+
+
+            <p class="muted">
+
+              Сообщества пользователя.
+
+            </p>
+
+          </div>
+
+
+
+          <span class="status-pill">
+
+            ${communities.length}
+
+          </span>
+
+        </div>
+
+
+
+        ${
+
+        communities.length
+
+            ? `
+
+              <div
+
+                class="public-user-community-list"
+
+              >
+
+                ${communities
+
+                .map(publicUserCommunityCard)
+
+                .join('')}
+
+              </div>
+
+            `
+
+            : `
+
+              <p class="muted">
+
+                Пользователь пока не состоит
+
+                в сообществах.
+
+              </p>
+
+            `
+
+    }
+
+      </aside>
+
+    </section>
+
+  `;
+
+  }
+
+
+
+  function normalizedPostType(post) {
+
+    return String(
+
+        post?.type ||
+
+        post?.postType ||
+
+        'TEXT'
+
+    ).toUpperCase();
+
+  }
+
+
+
+  function publicUserStatCard(
+
+      icon,
+
+      label,
+
+      count
+
+  ) {
+
+    return `
+
+    <article
+
+      class="card public-user-stat-card"
+
+    >
+
+      <span class="badge">
+
+        ${escapeHtml(icon)}
+
+        ${escapeHtml(label)}
+
+      </span>
+
+
+
+      <span class="metric">
+
+        ${Number(count || 0)}
+
+      </span>
+
+    </article>
+
+  `;
+
+  }
+
+
+
+  function publicUserPublicationSection(
+
+      title,
+
+      description,
+
+      posts
+
+  ) {
+
+    return `
+
+    <section class="public-user-section">
+
+      <div class="subsection-heading">
+
+        <div>
+
+          <h2>${escapeHtml(title)}</h2>
+
+
+
+          <p class="muted">
+
+            ${escapeHtml(description)}
+
+          </p>
+
+        </div>
+
+
+
+        <span class="status-pill">
+
+          ${posts.length}
+
+        </span>
+
+      </div>
+
+
+
+      ${
+
+        posts.length
+
+            ? `
+
+            <div class="feed-list">
+
+              ${posts
+
+                .map(postCard)
+
+                .join('')}
+
+            </div>
+
+          `
+
+            : `
+
+            <p
+
+              class="muted
+
+                     public-user-empty-section"
+
+            >
+
+              Опубликованных материалов
+
+              пока нет.
+
+            </p>
+
+          `
+
+    }
+
+    </section>
+
+  `;
+
+  }
+
+
+
+  function publicUserCommunityCard(
+
+      community
+
+  ) {
+
+    return `
+
+    <a
+
+      class="public-user-community-card"
+
+      href="#/communities/${encodeURIComponent(
+
+        community.id
+
+    )}"
+
+    >
+
+      <strong>
+
+        ${escapeHtml(
+
+        community.communityName
+
+    )}
+
+      </strong>
+
+
+
+      <span>
+
+        ${escapeHtml(
+
+        community.description ||
+
+        'Без описания'
+
+    )}
+
+      </span>
+
+
+
+      <small>
+
+        ${escapeHtml(
+
+        communityRoleLabel(
+
+            community.role
+
+        )
+
+    )}
+
+        · с ${formatDateShort(
+
+        community.joinedAt
+
+    )}
+
+      </small>
+
+    </a>
+
+  `;
+
+  }
+
+
+
+  function publicUserLink(username) {
+
+    const exactUsername =
+
+        String(username || '');
+
+
+
+    if (!exactUsername) {
+
+      return 'Пользователь';
+
+    }
+
+
+
+    return `
+
+    <a
+
+      class="public-user-link"
+
+      href="#/users/${encodeURIComponent(
+
+        exactUsername
+
+    )}"
+
+    >
+
+      ${escapeHtml(exactUsername)}
+
+    </a>
+
+  `;
+
   }
 
   async function shareAchievement(item) {
