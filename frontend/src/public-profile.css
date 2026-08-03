@@ -1,0 +1,1048 @@
+/* Public user profile and compact publication cards.
+ * Loaded after styles.css so these rules intentionally override base styles.
+ */
+
+.public-user-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px 24px;
+  margin: 26px 0 22px;
+  padding: 24px;
+  border: 1px solid rgba(224, 224, 224, 0.9);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.public-user-avatar {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border-radius: 28px;
+  background: var(--yellow);
+  color: var(--graphite);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.public-user-identity {
+  min-width: 0;
+}
+
+.public-user-identity .eyebrow {
+  margin-bottom: 5px;
+}
+
+.public-user-identity h1 {
+  overflow: hidden;
+  margin: 0;
+  font-size: clamp(34px, 5vw, 54px);
+  line-height: 1.02;
+  text-overflow: ellipsis;
+}
+
+.public-user-full-name {
+  margin: 9px 0 5px;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.public-user-identity small {
+  color: var(--graphite-2);
+}
+
+.public-user-actions {
+  display: flex;
+  align-self: start;
+  justify-content: flex-end;
+}
+
+.public-user-stats {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--neutral-2);
+}
+
+.public-user-stat-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 17px;
+  background: var(--neutral-1);
+}
+
+.public-user-stat-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--white);
+  font-size: 17px;
+}
+
+.public-user-stat-card strong {
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.public-user-stat-card > span:last-child {
+  overflow: hidden;
+  color: var(--graphite-2);
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-user-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+  align-items: start;
+  gap: 22px;
+  margin-bottom: 34px;
+}
+
+.public-user-publications,
+.public-user-communities {
+  border: 1px solid rgba(224, 224, 224, 0.88);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-soft);
+}
+
+.public-user-publications {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.public-user-sidebar {
+  min-width: 0;
+}
+
+.public-user-communities {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.public-user-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.public-user-panel-heading h2 {
+  margin: 2px 0 6px;
+  font-size: clamp(26px, 3vw, 36px);
+  line-height: 1.05;
+}
+
+.public-user-panel-heading p {
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.public-user-panel-heading.compact h2 {
+  font-size: 28px;
+}
+
+.public-user-feed {
+  gap: 14px;
+}
+
+.public-user-empty-section {
+  display: grid;
+  gap: 6px;
+  padding: 30px 20px;
+  border: 1px dashed var(--neutral-3);
+  border-radius: 20px;
+  background: var(--neutral-1);
+  text-align: center;
+}
+
+.public-user-empty-section strong {
+  font-size: 18px;
+}
+
+.public-user-empty-section span {
+  color: var(--graphite-2);
+}
+
+.public-user-community-list {
+  display: grid;
+  gap: 10px;
+}
+
+.public-user-community-card {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 13px 14px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 17px;
+  background: var(--neutral-1);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.public-user-community-card:hover,
+.public-user-community-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(51, 51, 51, 0.2);
+  background: var(--white);
+  outline: none;
+}
+
+.public-user-community-title {
+  overflow: hidden;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-user-community-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--graphite-2);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.public-user-community-card small,
+.public-user-community-empty {
+  color: var(--graphite-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Compact and readable post header used in feed, profile and communities. */
+.post-card {
+  display: grid;
+  gap: 15px;
+}
+
+.post-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+}
+
+.post-author-meta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.post-author-avatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--yellow);
+  color: var(--graphite);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.post-author-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.post-author-name {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-author-copy time {
+  color: var(--graphite-2);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.post-type-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.post-card-body {
+  display: grid;
+  gap: 13px;
+}
+
+.post-card-title {
+  margin: 0;
+  font-size: clamp(19px, 2.4vw, 24px);
+  line-height: 1.22;
+  letter-spacing: -0.025em;
+}
+
+.post-detail-title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.08;
+}
+
+.post-content {
+  margin: 0;
+  color: var(--graphite);
+  line-height: 1.68;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.post-card .payload-card {
+  gap: 8px;
+  margin-top: 0;
+  padding: 15px 16px;
+}
+
+.post-card .payload-card strong {
+  line-height: 1.35;
+}
+
+.post-card .payload-card span {
+  line-height: 1.5;
+}
+
+.public-user-publications .post-card {
+  padding: 19px;
+  border-radius: 22px;
+  box-shadow: none;
+}
+
+.public-user-publications .public-post-card-footer {
+  margin-top: 1px;
+}
+
+.community-post-card {
+  gap: 15px;
+}
+
+@media (max-width: 980px) {
+  .public-user-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .public-user-communities {
+    position: static;
+  }
+
+  .public-user-community-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .public-user-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 20px;
+  }
+
+  .public-user-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .public-user-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .public-user-layout {
+    gap: 16px;
+  }
+
+  .public-user-publications,
+  .public-user-communities {
+    padding: 17px;
+    border-radius: 24px;
+  }
+
+  .post-card-head {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .public-user-header {
+    grid-template-columns: 1fr;
+  }
+
+  .public-user-avatar {
+    width: 68px;
+    height: 68px;
+    border-radius: 22px;
+    font-size: 22px;
+  }
+
+  .public-user-stats,
+  .public-user-community-list {
+    grid-template-columns: 1fr;
+  }
+
+  .public-user-stat-card {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .public-user-panel-heading,
+  .post-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .post-type-badge {
+    align-self: flex-start;
+  }
+}
+
+/* Follow-up UX improvements: comments, community previews and catalog tabs. */
+.public-user-show-all-communities {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 2px;
+}
+
+.public-user-show-all-communities span {
+  min-width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--neutral-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.public-user-community-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 28px 18px;
+  background: rgba(16, 16, 16, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.public-user-community-dialog {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 56px);
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 28px;
+  background: var(--white);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.34);
+}
+
+.public-user-community-dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-right: 48px;
+}
+
+.public-user-community-dialog-heading h2 {
+  margin: 4px 0 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.05;
+}
+
+.public-user-community-dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--neutral-2);
+  border-radius: 50%;
+  background: var(--neutral-1);
+  color: var(--graphite);
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.public-user-community-dialog-close:hover,
+.public-user-community-dialog-close:focus-visible {
+  border-color: var(--yellow-hover);
+  background: var(--yellow);
+  outline: none;
+}
+
+.public-user-community-dialog-list {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding: 2px 6px 4px 2px;
+  overscroll-behavior: contain;
+}
+
+.public-user-community-dialog-list .public-user-community-card {
+  align-content: start;
+}
+
+/* The composer is always visible; only the comments list scrolls. */
+.public-post-dialog {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.public-post-comments {
+  min-height: 0;
+  gap: 14px;
+}
+
+.public-post-comments-heading {
+  align-items: center;
+}
+
+.public-post-comment-composer {
+  position: sticky;
+  top: -1px;
+  z-index: 4;
+  padding: 12px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 28px rgba(31, 31, 31, 0.08);
+}
+
+.public-post-comment-composer textarea {
+  min-height: 48px;
+  max-height: 120px;
+  background: var(--neutral-1);
+}
+
+.public-post-comment-list {
+  max-height: min(42vh, 470px);
+  overflow-y: auto;
+  padding-right: 6px;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.public-post-comment-list .comment-card {
+  padding: 13px 14px;
+  border-radius: 17px;
+}
+
+.public-post-comment-list .comment-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+/* Community catalog now shows one selected collection at a time. */
+.community-catalog-header {
+  margin-bottom: 18px;
+}
+
+.community-catalog-tabs {
+  width: fit-content;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.community-catalog-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--graphite);
+  font-weight: 850;
+  text-decoration: none;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.community-catalog-tab:hover,
+.community-catalog-tab:focus-visible {
+  background: var(--neutral-1);
+  outline: none;
+}
+
+.community-catalog-tab.active {
+  background: var(--yellow);
+}
+
+.community-catalog-tab strong {
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+}
+
+.community-catalog-section {
+  margin-top: 24px;
+}
+
+@media (max-width: 720px) {
+  .public-user-community-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .public-user-community-dialog {
+    min-height: 100%;
+    max-height: none;
+    padding: 20px 16px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .public-user-community-dialog-list {
+    grid-template-columns: 1fr;
+  }
+
+  .public-post-dialog {
+    max-height: none;
+  }
+
+  .public-post-comment-list {
+    max-height: 48vh;
+  }
+
+  .public-post-comment-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .public-post-comment-composer .btn {
+    width: 100%;
+  }
+
+  .community-catalog-tabs {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Transient action notices do not replace page content and disappear automatically. */
+.transient-notice {
+  position: fixed;
+  z-index: 120;
+  top: 86px;
+  right: max(18px, calc((100vw - 1180px) / 2));
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 50px rgba(31, 31, 31, 0.18);
+  animation: transient-notice-in 180ms ease-out;
+}
+
+.transient-notice.error {
+  border-color: rgba(141, 47, 47, 0.28);
+  background: #fff7f7;
+}
+
+.transient-notice > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.transient-notice strong {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.transient-notice span {
+  color: var(--graphite);
+  line-height: 1.4;
+}
+
+.transient-notice-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--neutral-2);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--graphite);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.transient-notice-close:hover,
+.transient-notice-close:focus-visible {
+  border-color: var(--yellow-hover);
+  background: var(--yellow);
+  outline: none;
+}
+
+@keyframes transient-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Compact Telegram-like message layout. */
+.chat-window {
+  min-height: 520px;
+}
+
+.messages {
+  min-height: 390px;
+  max-height: 62vh;
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+.message-row {
+  width: 100%;
+}
+
+.message-bubble {
+  width: fit-content;
+  min-width: 150px;
+  max-width: min(72%, 680px);
+  gap: 7px;
+  padding: 10px 13px 9px;
+  border-radius: 17px 17px 17px 6px;
+}
+
+.message-row.own .message-bubble {
+  border-radius: 17px 17px 6px 17px;
+}
+
+.message-bubble-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.message-bubble-meta time {
+  flex: 0 0 auto;
+  color: var(--graphite-2);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.message-bubble p {
+  max-width: 62ch;
+  line-height: 1.42;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Comments scroll independently; composer stays at the bottom of the dialog. */
+.public-post-comments {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.public-post-comment-list {
+  max-height: min(43vh, 480px);
+  scroll-padding-block: 12px;
+}
+
+.public-post-comment-composer {
+  position: sticky;
+  z-index: 5;
+  top: auto;
+  bottom: -1px;
+  margin-top: 2px;
+  box-shadow: 0 -10px 28px rgba(31, 31, 31, 0.08);
+}
+
+@media (max-width: 720px) {
+  .transient-notice {
+    top: 72px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+
+  .chat-window {
+    min-height: 460px;
+  }
+
+  .messages {
+    min-height: 330px;
+    padding: 14px;
+  }
+
+  .message-bubble {
+    min-width: 112px;
+    max-width: 88%;
+  }
+}
+
+/* Final compact chat bubbles: content determines height; no artificial empty space. */
+.messages {
+  align-items: stretch;
+  gap: 6px;
+  padding: 14px 18px;
+}
+
+.message-row,
+.message-row.own {
+  flex: 0 0 auto;
+  min-height: 0;
+  align-items: flex-start;
+}
+
+.message-row.own {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  width: fit-content;
+  min-width: 0;
+  max-width: min(68%, 620px);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 7px 10px 8px;
+  border-radius: 15px 15px 15px 5px;
+}
+
+.message-row.own .message-bubble {
+  border-radius: 15px 15px 5px 15px;
+}
+
+.message-bubble-meta {
+  min-height: 0;
+  align-items: baseline;
+  gap: 12px;
+  line-height: 1.1;
+}
+
+.message-author {
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.message-bubble-meta time {
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.message-bubble p {
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.34;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-indent: 0;
+}
+
+/* Compact and readable comment counter in every feed/public-profile post card. */
+.public-post-card-footer {
+  align-items: center;
+  gap: 12px;
+}
+
+.public-post-card-action {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-comments-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--neutral-2);
+  border-radius: 999px;
+  background: var(--neutral-1);
+  color: var(--graphite-2);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.post-comments-count strong {
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .messages {
+    gap: 5px;
+    padding: 12px;
+  }
+
+  .message-bubble {
+    max-width: 86%;
+    padding: 7px 9px;
+  }
+
+  .public-post-card-footer {
+    gap: 8px;
+  }
+
+  .public-post-card-action {
+    font-size: 12px;
+  }
+}
+
+/* Final modal layout: one scroll area for comments, composer always visible. */
+.public-post-dialog[data-public-post-dialog] {
+  width: min(760px, calc(100vw - 32px));
+  height: min(900px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.public-post-dialog[data-public-post-dialog] .public-post-detail-card {
+  flex: 0 1 auto;
+  max-height: min(42dvh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.public-post-dialog[data-public-post-dialog] .public-post-comments {
+  flex: 1 1 0;
+  min-height: 260px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.public-post-dialog[data-public-post-dialog] .public-post-comment-list {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding: 0 6px 8px 0;
+  scroll-padding-block: 10px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.public-post-dialog[data-public-post-dialog] .public-post-comment-composer {
+  position: static;
+  z-index: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  box-shadow: 0 -8px 24px rgba(31, 31, 31, 0.07);
+}
+
+/* Restore readable chat typography while preserving compact bubbles. */
+.message-author {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.message-bubble-meta time {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.message-bubble p {
+  font-size: 16px;
+  line-height: 1.42;
+}
+
+@media (max-width: 720px) {
+  .public-post-dialog[data-public-post-dialog] {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .public-post-dialog[data-public-post-dialog] .public-post-detail-card {
+    max-height: 38dvh;
+  }
+
+  .public-post-dialog[data-public-post-dialog] .public-post-comments {
+    min-height: 220px;
+  }
+
+  .message-author {
+    font-size: 12px;
+  }
+
+  .message-bubble-meta time {
+    font-size: 10px;
+  }
+
+  .message-bubble p {
+    font-size: 15px;
+  }
+}

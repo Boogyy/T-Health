@@ -34,6 +34,7 @@ public class PostMapper {
                 achievementMapper.toUserAchievementResponse(savedPost.getUserAchievement()),
                 savedPost.getPostType(),
                 savedPost.getContent(),
+                savedPost.getCommentsCount(),
                 savedPost.getCreatedAt(),
                 savedPost.getUpdatedAt()
         );

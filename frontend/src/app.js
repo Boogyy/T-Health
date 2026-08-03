@@ -1,4 +1,5 @@
 import './styles.css';
+import './public-profile.css';
 
 (() => {
   'use strict';
@@ -55,12 +56,14 @@ import './styles.css';
 
     publicPostDetails: {},
     publicPostLoadingIds: new Set(),
+    publicPostReturnRoute: null,
 
     // Username используется как ключ. Объекты без прототипа не конфликтуют
     // со специальными именами вроде "__proto__" и "constructor".
     publicUserProfiles: Object.create(null),
     publicUserProfileErrors: Object.create(null),
     publicUserProfileLoadingNames: new Set(),
+    publicUserCommunityDialogUsername: null,
 
     chats: null,
     chatMessages: {},
@@ -77,6 +80,7 @@ import './styles.css';
 
     error: null,
     flash: null,
+    transientNotice: null,
     achievementModal: null,
     achievementQueue: [],
     achievementQueueTotal: 0,
@@ -85,6 +89,7 @@ import './styles.css';
   };
 
   const app = document.getElementById('app');
+  let transientNoticeTimer = null;
 
   window.addEventListener('hashchange', renderRoute);
   window.addEventListener('DOMContentLoaded', init);
@@ -614,6 +619,7 @@ import './styles.css';
       state.user = user;
       state.publicPostDetails[id] = post;
       state.postComments[id] = Array.isArray(comments) ? comments : [];
+      updatePostCommentsCount(id, state.postComments[id].length);
     } catch (error) {
       if (error instanceof AuthRequiredError) {
         navigate('/login');
@@ -705,6 +711,7 @@ import './styles.css';
 
     state.publicPostDetails = {};
     state.publicPostLoadingIds.clear();
+    state.publicPostReturnRoute = null;
 
     state.chats = null;
     state.chatMessages = {};
@@ -712,6 +719,13 @@ import './styles.css';
     state.publicUserProfiles = Object.create(null);
     state.publicUserProfileErrors = Object.create(null);
     state.publicUserProfileLoadingNames.clear();
+    state.publicUserCommunityDialogUsername = null;
+
+    if (transientNoticeTimer) {
+      clearTimeout(transientNoticeTimer);
+      transientNoticeTimer = null;
+    }
+    state.transientNotice = null;
   }
 
   async function loadPublicUserProfile(
@@ -778,6 +792,14 @@ import './styles.css';
           ]);
 
       state.user = currentUser;
+
+      if (
+        String(profile?.userId) ===
+        String(currentUser?.id)
+      ) {
+        navigate('/profile');
+        return;
+      }
 
       state.publicUserProfiles[
           exactUsername
@@ -879,6 +901,14 @@ import './styles.css';
     ) {
       const username = parts[1];
 
+      if (
+        state.user?.username &&
+        state.user.username === username
+      ) {
+        navigate('/profile');
+        return;
+      }
+
       renderProtected(
           renderPublicUserProfile(username)
       );
@@ -927,11 +957,19 @@ import './styles.css';
     if (parts[0] === 'communities') {
       renderProtected(renderCommunitiesRoute(parts));
 
-      if (!parts[1] && (!state.communities || !state.myCommunities)) {
+      const catalogRoute =
+        !parts[1] ||
+        parts[1] === 'all' ||
+        parts[1] === 'mine';
+
+      if (
+        catalogRoute &&
+        (!state.communities || !state.myCommunities)
+      ) {
         loadCommunities();
       }
 
-      if (parts[1] && parts[1] !== 'new') {
+      if (!catalogRoute && parts[1] && parts[1] !== 'new') {
         const communityId = parts[1];
 
         const communityNotLoaded =
@@ -1056,6 +1094,7 @@ import './styles.css';
           </nav>
         </div>
       </header>
+      ${transientNoticeHtml()}
       <main class="page">${content}</main>
       ${achievementModalHtml()}
     `;
@@ -1699,9 +1738,81 @@ import './styles.css';
       <div class="form-field full-width"><label for="post-workout-description">Описание</label><textarea id="post-workout-description" name="description" maxlength="2000" placeholder="Как прошла тренировка"></textarea></div>`;
   }
 
+  function postAuthorMeta(post) {
+    const username = String(post?.username || '');
+    const initial = username
+      ? username.charAt(0).toUpperCase()
+      : 'П';
+
+    return `
+      <div class="post-author-meta">
+        <span class="post-author-avatar" aria-hidden="true">
+          ${escapeHtml(initial)}
+        </span>
+
+        <span class="post-author-copy">
+          <span class="post-author-name">
+            ${publicUserLink(username)}
+          </span>
+
+          <time datetime="${escapeHtml(post?.createdAt || '')}">
+            ${formatDateTime(post?.createdAt)}
+          </time>
+        </span>
+      </div>
+    `;
+  }
+
+  function postCommentsCount(post) {
+    const value = Number(
+      post?.commentsCount ??
+      post?.commentCount ??
+      0
+    );
+
+    return Number.isFinite(value) && value > 0
+      ? Math.trunc(value)
+      : 0;
+  }
+
+  function updatePostCommentsCount(postId, count) {
+    const id = String(postId);
+    const safeCount = Math.max(0, Number(count) || 0);
+
+    const updatePost = (post) => {
+      if (!post || String(post.id) !== id) {
+        return post;
+      }
+
+      return {
+        ...post,
+        commentsCount: safeCount,
+      };
+    };
+
+    if (state.publicPostDetails[id]) {
+      state.publicPostDetails[id] = updatePost(
+        state.publicPostDetails[id]
+      );
+    }
+
+    if (Array.isArray(state.feedPosts)) {
+      state.feedPosts = state.feedPosts.map(updatePost);
+    }
+
+    Object.values(state.publicUserProfiles).forEach((profile) => {
+      if (!Array.isArray(profile?.publications)) {
+        return;
+      }
+
+      profile.publications = profile.publications.map(updatePost);
+    });
+  }
+
   function postCard(post) {
     const type = post.type || post.postType || 'TEXT';
     const title = post.title || 'Пост без заголовка';
+    const commentsCount = postCommentsCount(post);
 
     return `
       <article
@@ -1711,23 +1822,42 @@ import './styles.css';
         role="link"
         aria-label="Открыть публикацию: ${escapeHtml(title)}"
       >
-        <div class="post-header">
-          <div>
-            <span class="badge">${postTypeLabel(type)}</span>
-            <h3>${escapeHtml(title)}</h3>
-            <p class="muted">
-              ${publicUserLink(post.username)}
-              · ${formatDateTime(post.createdAt)}
-            </p>
-          </div>
+        <header class="post-card-head">
+          ${postAuthorMeta(post)}
+
+          <span class="badge post-type-badge">
+            ${postTypeLabel(type)}
+          </span>
+        </header>
+
+        <div class="post-card-body">
+          <h3 class="post-card-title">
+            ${escapeHtml(title)}
+          </h3>
+
+          ${post.content
+            ? `<p class="post-content">${escapeHtml(post.content)}</p>`
+            : ''}
+
+          ${post.workout ? postWorkoutPayload(post.workout) : ''}
+          ${post.recipe ? postRecipePayload(post.recipe) : ''}
+          ${post.userAchievement ? postAchievementPayload(post.userAchievement) : ''}
         </div>
-        ${post.content ? `<p>${escapeHtml(post.content)}</p>` : ''}
-        ${post.workout ? postWorkoutPayload(post.workout) : ''}
-        ${post.recipe ? postRecipePayload(post.recipe) : ''}
-        ${post.userAchievement ? postAchievementPayload(post.userAchievement) : ''}
+
         <div class="public-post-card-footer">
-          <span>Открыть публикацию и комментарии</span>
-          <span aria-hidden="true">→</span>
+          <span class="public-post-card-action">
+            Открыть публикацию
+            <span aria-hidden="true">→</span>
+          </span>
+
+          <span
+            class="post-comments-count"
+            aria-label="Комментариев: ${commentsCount}"
+            title="Комментариев: ${commentsCount}"
+          >
+            <span aria-hidden="true">💬</span>
+            <strong>${commentsCount}</strong>
+          </span>
         </div>
       </article>`;
   }
@@ -1737,6 +1867,7 @@ import './styles.css';
     const post = state.publicPostDetails[id];
     const comments = state.postComments[id];
     const loading = state.publicPostLoadingIds.has(id);
+    const closeRoute = publicPostCloseRoute();
 
     if (state.error && !post) {
       return `
@@ -1747,10 +1878,17 @@ import './styles.css';
             aria-modal="true"
             aria-labelledby="public-post-title"
           >
-            <a class="public-post-close" href="#/feed" aria-label="Закрыть">×</a>
+            <a
+              class="public-post-close"
+              href="#${escapeHtml(closeRoute)}"
+              data-close-public-post
+              aria-label="Закрыть"
+            >×</a>
             <h1 id="public-post-title">Не удалось открыть публикацию</h1>
             ${alertHtml('error', state.error)}
-            <a class="btn" href="#/feed">Вернуться в ленту</a>
+            <a class="btn" href="#${escapeHtml(closeRoute)}" data-close-public-post>
+              Вернуться назад
+            </a>
           </section>
         </div>
       `;
@@ -1765,7 +1903,12 @@ import './styles.css';
             aria-modal="true"
             aria-label="Загрузка публикации"
           >
-            <a class="public-post-close" href="#/feed" aria-label="Закрыть">×</a>
+            <a
+              class="public-post-close"
+              href="#${escapeHtml(closeRoute)}"
+              data-close-public-post
+              aria-label="Закрыть"
+            >×</a>
             <div class="skeleton public-post-dialog-skeleton"></div>
           </section>
         </div>
@@ -1783,22 +1926,28 @@ import './styles.css';
           aria-labelledby="public-post-title"
           data-public-post-dialog
         >
-          <a class="public-post-close" href="#/feed" aria-label="Закрыть публикацию">×</a>
+          <a
+            class="public-post-close"
+            href="#${escapeHtml(closeRoute)}"
+            data-close-public-post
+            aria-label="Закрыть публикацию"
+          >×</a>
 
           ${flashHtml()}
           ${state.error ? alertHtml('error', state.error) : ''}
 
           <article class="post-card post-detail-card public-post-detail-card">
-            <div class="post-header">
-              <div>
-                <span class="badge">${postTypeLabel(type)}</span>
-                <h1 id="public-post-title">${escapeHtml(post.title || 'Публикация')}</h1>
-                <p class="muted">
-                  ${publicUserLink(post.username)}
-                  · ${formatDateTime(post.createdAt)}
-                </p>
-              </div>
-            </div>
+            <header class="post-card-head">
+              ${postAuthorMeta(post)}
+
+              <span class="badge post-type-badge">
+                ${postTypeLabel(type)}
+              </span>
+            </header>
+
+            <h1 id="public-post-title" class="post-detail-title">
+              ${escapeHtml(post.title || 'Публикация')}
+            </h1>
 
             ${post.content ? `<p class="post-content">${escapeHtml(post.content)}</p>` : ''}
             ${post.workout ? postWorkoutPayload(post.workout) : ''}
@@ -1807,7 +1956,7 @@ import './styles.css';
           </article>
 
           <section class="comments-section public-post-comments">
-            <div class="subsection-heading">
+            <div class="subsection-heading public-post-comments-heading">
               <div>
                 <h2>Комментарии</h2>
                 <p class="muted">Обсуждение публичной публикации.</p>
@@ -1820,7 +1969,7 @@ import './styles.css';
 
             ${comments.length
               ? `
-                <div class="comment-list">
+                <div class="comment-list public-post-comment-list" data-public-comment-list>
                   ${comments
                     .map((comment) => commentCard(null, post, comment))
                     .join('')}
@@ -1835,7 +1984,7 @@ import './styles.css';
 
             <form
               id="comment-form"
-              class="comment-form"
+              class="comment-form public-post-comment-composer"
               data-post-id="${escapeHtml(post.id)}"
             >
               <label class="sr-only" for="public-comment-content">
@@ -1856,6 +2005,54 @@ import './styles.css';
         </section>
       </div>
     `;
+  }
+
+  function publicPostCloseRoute() {
+    return state.publicPostReturnRoute || '/feed';
+  }
+
+  function closePublicPost() {
+    const route = publicPostCloseRoute();
+    state.publicPostReturnRoute = null;
+    navigate(route);
+  }
+
+  function scrollPublicCommentsToBottom() {
+    const scroll = () => {
+      const list = app.querySelector(
+        '[data-public-comment-list]'
+      );
+
+      if (!list) {
+        return;
+      }
+
+      /*
+       * Прокручиваем только список комментариев. Само модальное
+       * окно больше не имеет отдельной вертикальной прокрутки,
+       * поэтому новый комментарий всегда оказывается полностью
+       * виден над закреплённой формой отправки.
+       */
+      list.scrollTop = Math.max(
+        0,
+        list.scrollHeight - list.clientHeight
+      );
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scroll);
+    });
+
+    /*
+     * Повторяем после перерасчёта шрифтов и размеров карточек.
+     * Это защищает от недокрутки при другом масштабе браузера.
+     */
+    window.setTimeout(scroll, 120);
+    window.setTimeout(scroll, 320);
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scroll).catch(() => {});
+    }
   }
 
   function postWorkoutPayload(workout) {
@@ -1945,7 +2142,14 @@ import './styles.css';
       return renderCommunityForm();
     }
 
-    if (!parts[1]) {
+    const catalogView =
+      !parts[1] || parts[1] === 'all'
+        ? 'all'
+        : parts[1] === 'mine'
+          ? 'mine'
+          : null;
+
+    if (catalogView) {
       if (state.error) {
         return (
           pageHeader('Сообщества', 'Не удалось получить данные.') +
@@ -1960,7 +2164,7 @@ import './styles.css';
         );
       }
 
-      return renderCommunitiesList();
+      return renderCommunitiesList(catalogView);
     }
 
     const communityId = String(parts[1]);
@@ -2001,14 +2205,17 @@ import './styles.css';
     return renderCommunityDetails(community);
   }
 
-  function renderCommunitiesList() {
+  function renderCommunitiesList(activeView = 'all') {
     const communities = state.communities || [];
     const myCommunities = state.myCommunities || [];
+    const ownedCommunities = myCommunities.filter(isCommunityOwner);
+    const mineActive = activeView === 'mine';
+    const visibleCommunities = mineActive ? ownedCommunities : communities;
 
     return `
       ${flashHtml()}
 
-      <section class="section-header">
+      <section class="section-header community-catalog-header">
         <div>
           <p class="eyebrow">Общение по интересам</p>
 
@@ -2027,68 +2234,68 @@ import './styles.css';
         </a>
       </section>
 
-      <section class="community-section">
+      <nav class="community-catalog-tabs" aria-label="Разделы сообществ">
+        ${communityCatalogTab(
+          '/communities',
+          'Все сообщества',
+          communities.length,
+          !mineActive
+        )}
+        ${communityCatalogTab(
+          '/communities/mine',
+          'Мои сообщества',
+          ownedCommunities.length,
+          mineActive
+        )}
+      </nav>
+
+      <section class="community-section community-catalog-section">
         <div class="subsection-heading">
           <div>
-            <h2>Мои сообщества</h2>
+            <h2>${mineActive ? 'Мои сообщества' : 'Все сообщества'}</h2>
 
             <p class="muted">
-              Созданные вами сообщества и те,
-              в которые вы вступили.
+              ${mineActive
+                ? 'Сообщества, которые вы создали.'
+                : 'Открытый каталог сообществ Т-Здоровья.'}
             </p>
           </div>
 
           <span class="status-pill">
-            ${myCommunities.length}
+            ${visibleCommunities.length}
           </span>
         </div>
 
-        ${
-          myCommunities.length
-            ? `
+        ${visibleCommunities.length
+          ? `
               <div class="community-grid">
-                ${myCommunities.map(communityCard).join('')}
+                ${visibleCommunities.map(communityCard).join('')}
               </div>
             `
-            : emptyState(
-                'Вы пока не состоите в сообществах',
-                'Выберите сообщество ниже или создайте свое.',
-                '#/communities/new',
-                'Создать сообщество'
-              )
-        }
+          : emptyState(
+              mineActive
+                ? 'Вы пока не создали ни одного сообщества'
+                : 'Сообществ пока нет',
+              mineActive
+                ? 'Создайте сообщество и пригласите единомышленников.'
+                : 'Станьте первым автором сообщества.',
+              '#/communities/new',
+              'Создать сообщество'
+            )}
       </section>
+    `;
+  }
 
-      <section class="community-section">
-        <div class="subsection-heading">
-          <div>
-            <h2>Все сообщества</h2>
-
-            <p class="muted">
-              Открытый каталог сообществ Т-Здоровья.
-            </p>
-          </div>
-
-          <span class="status-pill">
-            ${communities.length}
-          </span>
-        </div>
-
-        ${
-          communities.length
-            ? `
-              <div class="community-grid">
-                ${communities.map(communityCard).join('')}
-              </div>
-            `
-            : emptyState(
-                'Сообществ пока нет',
-                'Станьте первым автором сообщества.',
-                '#/communities/new',
-                'Создать сообщество'
-              )
-        }
-      </section>
+  function communityCatalogTab(path, label, count, active) {
+    return `
+      <a
+        class="community-catalog-tab${active ? ' active' : ''}"
+        href="#${path}"
+        ${active ? 'aria-current="page"' : ''}
+      >
+        <span>${escapeHtml(label)}</span>
+        <strong>${Number(count || 0)}</strong>
+      </a>
     `;
   }
 
@@ -2373,34 +2580,31 @@ import './styles.css';
 
     return `
       <article class="post-card community-post-card">
-        <div class="post-header">
-          <div>
-            <span class="badge">
-              Пост сообщества
-            </span>
+        <header class="post-card-head">
+          ${postAuthorMeta(post)}
 
-            <h3>
-              ${escapeHtml(
-                post.title || 'Пост без заголовка'
-              )}
-            </h3>
+          <span class="badge post-type-badge">
+            Пост сообщества
+          </span>
+        </header>
 
-            <p class="muted">
-              ${publicUserLink(post.username)}
-              · ${formatDateTime(post.createdAt)}
-            </p>
-          </div>
+        <div class="post-card-body">
+          <h3 class="post-card-title">
+            ${escapeHtml(
+              post.title || 'Пост без заголовка'
+            )}
+          </h3>
+
+          ${
+            post.content
+              ? `
+                <p class="post-content">
+                  ${escapeHtml(post.content)}
+                </p>
+              `
+              : ''
+          }
         </div>
-
-        ${
-          post.content
-            ? `
-              <p class="post-content">
-                ${escapeHtml(post.content)}
-              </p>
-            `
-            : ''
-        }
 
         ${
           canDiscuss
@@ -2414,17 +2618,11 @@ import './styles.css';
                 Открыть обсуждение
               </a>
             `
-            : `
-              <p class="muted microcopy">
-                Вступите в сообщество, чтобы читать
-                и писать комментарии.
-              </p>
-            `
+            : ''
         }
       </article>
     `;
   }
-
 
   function communityMemberRow(community, member) {
     const isCurrent =
@@ -3246,24 +3444,24 @@ import './styles.css';
     return `
       <div class="message-row${own ? ' own' : ''}">
         <article class="message-bubble">
-          <span class="message-author">
-            ${
-              own
-                ? 'Вы'
-                : escapeHtml(
-                    message.senderUsername ||
-                      'Собеседник'
-                  )
-            }
-          </span>
+          <header class="message-bubble-meta">
+            <span class="message-author">
+              ${
+                own
+                  ? 'Вы'
+                  : escapeHtml(
+                      message.senderUsername ||
+                        'Собеседник'
+                    )
+              }
+            </span>
 
-          <p>
-            ${escapeHtml(message.content || '')}
-          </p>
+            <time datetime="${escapeHtml(message.sentAt || '')}">
+              ${formatChatTime(message.sentAt)}
+            </time>
+          </header>
 
-          <time datetime="${escapeHtml(message.sentAt || '')}">
-            ${formatChatTime(message.sentAt)}
-          </time>
+          <p>${escapeHtml(message.content || '')}</p>
         </article>
       </div>
     `;
@@ -3303,6 +3501,95 @@ import './styles.css';
     return alertHtml('success', message);
   }
 
+  function transientNoticeHtml() {
+    const notice = state.transientNotice;
+
+    if (!notice) {
+      return '';
+    }
+
+    const title = notice.type === 'error'
+      ? 'Не удалось выполнить действие'
+      : 'Готово';
+
+    return `
+      <aside
+        class="transient-notice ${escapeHtml(notice.type)}"
+        role="status"
+        aria-live="polite"
+      >
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(notice.message)}</span>
+        </div>
+
+        <button
+          type="button"
+          class="transient-notice-close"
+          data-dismiss-transient-notice
+          aria-label="Закрыть уведомление"
+        >×</button>
+      </aside>
+    `;
+  }
+
+  function dismissTransientNotice() {
+    if (transientNoticeTimer) {
+      clearTimeout(transientNoticeTimer);
+      transientNoticeTimer = null;
+    }
+
+    state.transientNotice = null;
+    renderRoute(false);
+  }
+
+  function showTransientNotice(
+    type,
+    message,
+    duration = 5600
+  ) {
+    if (transientNoticeTimer) {
+      clearTimeout(transientNoticeTimer);
+    }
+
+    const id = `${Date.now()}-${Math.random()}`;
+
+    state.transientNotice = {
+      id,
+      type,
+      message,
+    };
+
+    renderRoute(false);
+
+    transientNoticeTimer = window.setTimeout(() => {
+      if (state.transientNotice?.id !== id) {
+        return;
+      }
+
+      state.transientNotice = null;
+      transientNoticeTimer = null;
+      renderRoute(false);
+    }, duration);
+  }
+
+  function publicationErrorMessage(type, error) {
+    const message = friendlyError(error);
+
+    if (/already published|уже опубликован/i.test(message)) {
+      const duplicateMessages = {
+        workout: 'Эта тренировка уже опубликована в ленте.',
+        recipe: 'Этот рецепт уже опубликован в ленте.',
+        achievement: 'Это достижение уже опубликовано в ленте.',
+      };
+
+      return duplicateMessages[type] ||
+        'Эта запись уже опубликована в ленте.';
+    }
+
+    return message;
+  }
+
   function logoHtml() {
     return `<span class="logo-mark" aria-hidden="true"><span class="logo-shield">T</span></span>`;
   }
@@ -3311,6 +3598,9 @@ import './styles.css';
     app.querySelectorAll('[data-auth]').forEach((button) => button.addEventListener('click', () => startAuth(button.dataset.auth)));
     app.querySelectorAll('[data-logout]').forEach((button) => button.addEventListener('click', logout));
     app.querySelectorAll('[data-reload]').forEach((button) => button.addEventListener('click', () => reloadCurrentSection()));
+    app.querySelectorAll('[data-dismiss-transient-notice]').forEach((button) => {
+      button.addEventListener('click', dismissTransientNotice);
+    });
 
     app.querySelectorAll('[data-accept-achievement]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -3320,7 +3610,15 @@ import './styles.css';
     });
 
     app.querySelectorAll('[data-share-achievement]').forEach((button) => {
-      button.addEventListener('click', () => shareAchievement(state.achievementModal));
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+
+        try {
+          await shareAchievement(state.achievementModal);
+        } finally {
+          button.disabled = false;
+        }
+      });
     });
 
     app.querySelectorAll('[data-show-achievement]').forEach((button) => {
@@ -3332,9 +3630,51 @@ import './styles.css';
       });
     });
 
-    app.querySelectorAll('[data-share-workout]').forEach((button) => button.addEventListener('click', () => shareEntity('workout', button.dataset.shareWorkout)));
-    app.querySelectorAll('[data-share-recipe]').forEach((button) => button.addEventListener('click', () => shareEntity('recipe', button.dataset.shareRecipe)));
-    app.querySelectorAll('[data-share-achievement-entry]').forEach((button) => button.addEventListener('click', () => shareAchievement(findAchievementById(state.achievements || [], button.dataset.shareAchievementEntry))));
+    app.querySelectorAll('[data-share-workout]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+
+        try {
+          await shareEntity(
+            'workout',
+            button.dataset.shareWorkout
+          );
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+
+    app.querySelectorAll('[data-share-recipe]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+
+        try {
+          await shareEntity(
+            'recipe',
+            button.dataset.shareRecipe
+          );
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+    app.querySelectorAll('[data-share-achievement-entry]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+
+        try {
+          await shareAchievement(
+            findAchievementById(
+              state.achievements || [],
+              button.dataset.shareAchievementEntry
+            )
+          );
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
 
     app.querySelectorAll('[data-delete-workout]').forEach((button) => {
       button.addEventListener('click', async () => {
@@ -3430,55 +3770,88 @@ import './styles.css';
 
     app.querySelectorAll('[data-open-public-post]').forEach((card) => {
       const open = () => {
-        navigate(`/feed/${card.dataset.openPublicPost}`);
+        const targetRoute = `/feed/${card.dataset.openPublicPost}`;
+        const currentRoute = normalizedRoute();
+
+        if (currentRoute !== targetRoute) {
+          state.publicPostReturnRoute = currentRoute;
+        }
+
+        navigate(targetRoute);
       };
 
-      card.addEventListener(
-          'click',
-          (event) => {
-            if (
-                event.target.closest(
-                    'a, button, input, textarea, select'
-                )
-            ) {
-              return;
-            }
+      card.addEventListener('click', (event) => {
+        if (
+          event.target.closest(
+            'a, button, input, textarea, select'
+          )
+        ) {
+          return;
+        }
 
-            open();
-          }
-      );
-      card.addEventListener(
-          'keydown',
-          (event) => {
-            if (
-                event.target.closest(
-                    'a, button, input, textarea, select'
-                )
-            ) {
-              return;
-            }
+        open();
+      });
 
-            if (
-                event.key !== 'Enter' &&
-                event.key !== ' '
-            ) {
-              return;
-            }
+      card.addEventListener('keydown', (event) => {
+        if (
+          event.target.closest(
+            'a, button, input, textarea, select'
+          )
+        ) {
+          return;
+        }
 
-            event.preventDefault();
-            open();
-          }
-      );
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return;
+        }
+
+        event.preventDefault();
+        open();
+      });
     });
 
-    app.querySelectorAll('[data-close-public-post]').forEach((overlay) => {
-      overlay.addEventListener('click', (event) => {
-        if (event.target !== overlay) return;
-        navigate('/feed');
+    app.querySelectorAll('[data-close-public-post]').forEach((control) => {
+      control.addEventListener('click', (event) => {
+        if (
+          control.classList.contains('public-post-overlay') &&
+          event.target !== control
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        closePublicPost();
       });
     });
 
     app.querySelectorAll('[data-public-post-dialog]').forEach((dialog) => {
+      dialog.addEventListener('click', (event) => event.stopPropagation());
+    });
+
+    app.querySelectorAll('[data-open-public-user-communities]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.publicUserCommunityDialogUsername =
+          button.dataset.openPublicUserCommunities;
+        renderRoute(false);
+      });
+    });
+
+    app.querySelectorAll('[data-close-public-user-communities]').forEach((control) => {
+      control.addEventListener('click', (event) => {
+        if (
+          control.classList.contains('public-user-community-overlay') &&
+          event.target !== control
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        state.publicUserCommunityDialogUsername = null;
+        renderRoute(false);
+      });
+    });
+
+    app.querySelectorAll('[data-public-user-community-dialog]').forEach((dialog) => {
       dialog.addEventListener('click', (event) => event.stopPropagation());
     });
 
@@ -3650,7 +4023,11 @@ import './styles.css';
     }
 
     if (parts[0] === 'communities') {
-      if (!parts[1]) {
+      if (
+        !parts[1] ||
+        parts[1] === 'all' ||
+        parts[1] === 'mine'
+      ) {
         state.communities = null;
         state.myCommunities = null;
         await loadCommunities(true);
@@ -3891,6 +4268,11 @@ import './styles.css';
         (comment) =>
           String(comment.id) !==
           normalizedCommentId
+      );
+
+      updatePostCommentsCount(
+        normalizedPostId,
+        state.postComments[normalizedPostId].length
       );
 
       state.flash =
@@ -4197,9 +4579,15 @@ import './styles.css';
         comment,
       ];
 
+      updatePostCommentsCount(
+        postId,
+        state.postComments[String(postId)].length
+      );
+
       form.reset();
 
       renderRoute(false);
+      scrollPublicCommentsToBottom();
     } catch (error) {
       state.error = friendlyError(error);
       renderRoute(false);
@@ -4343,463 +4731,241 @@ import './styles.css';
       : `/api/posts/recipes/${encodeURIComponent(id)}/share`;
 
     try {
+      state.error = null;
+
       await apiFetch(path, { method: 'POST', body: JSON.stringify({ postTitle }) });
       state.flash = type === 'workout' ? 'Тренировка опубликована в ленте.' : 'Рецепт опубликован в ленте.';
       state.feedPosts = null;
       await loadFeed(true);
       navigate('/feed');
     } catch (error) {
-      state.error = friendlyError(error);
-      renderRoute(false);
+      state.error = null;
+
+      showTransientNotice(
+        'error',
+        publicationErrorMessage(type, error)
+      );
     }
   }
 
   function renderPublicUserProfile(username) {
-
-    const exactUsername =
-
-        String(username || '');
-
-
-
-    const profile =
-
-        state.publicUserProfiles[exactUsername];
-
-
-
-    const error =
-
-        state.publicUserProfileErrors[exactUsername];
-
-
-
-    const loading =
-
-        state.publicUserProfileLoadingNames.has(
-
-            exactUsername
-
-        );
-
-
+    const exactUsername = String(username || '');
+    const profile = state.publicUserProfiles[exactUsername];
+    const error = state.publicUserProfileErrors[exactUsername];
+    const loading = state.publicUserProfileLoadingNames.has(exactUsername);
 
     if (error && !profile) {
-
       return (
-
-          pageHeader(
-
-              'Профиль пользователя',
-
-              'Не удалось получить публичные данные.'
-
-          ) +
-
-          alertHtml('error', error)
-
+        pageHeader(
+          'Профиль пользователя',
+          'Не удалось получить публичные данные.'
+        ) +
+        alertHtml('error', error)
       );
-
     }
-
-
 
     if (!profile || loading) {
-
       return (
-
-          pageHeader(
-
-              'Профиль пользователя',
-
-              'Загружаем публичные публикации и сообщества.'
-
-          ) +
-
-          skeletonGrid()
-
+        pageHeader(
+          'Профиль пользователя',
+          'Загружаем публичные публикации и сообщества.'
+        ) +
+        skeletonGrid()
       );
-
     }
 
+    const publications = Array.isArray(profile.publications)
+      ? profile.publications
+      : [];
 
+    const communities = Array.isArray(profile.communities)
+      ? profile.communities
+      : [];
 
-    const publications =
-
-        Array.isArray(profile.publications)
-
-            ? profile.publications
-
-            : [];
-
-
-
-    const communities =
-
-        Array.isArray(profile.communities)
-
-            ? profile.communities
-
-            : [];
-
-
-
-    const textPosts = publications.filter(
-
-        (post) =>
-
-            normalizedPostType(post) === 'TEXT'
-
+    const visibleCommunities = communities.slice(0, 4);
+    const hiddenCommunitiesCount = Math.max(
+      0,
+      communities.length - visibleCommunities.length
     );
-
-
 
     const workouts = publications.filter(
-
-        (post) =>
-
-            normalizedPostType(post) === 'WORKOUT'
-
+      (post) => normalizedPostType(post) === 'WORKOUT'
     );
-
-
 
     const recipes = publications.filter(
-
-        (post) =>
-
-            normalizedPostType(post) === 'RECIPE'
-
+      (post) => normalizedPostType(post) === 'RECIPE'
     );
-
-
 
     const achievements = publications.filter(
-
-        (post) =>
-
-            normalizedPostType(post) ===
-
-            'ACHIEVEMENT'
-
+      (post) => normalizedPostType(post) === 'ACHIEVEMENT'
     );
 
-
-
-    const isCurrentUser =
-
-        String(profile.userId) ===
-
-        String(state.user?.id);
-
-
-
     const fullName = [
-
       profile.firstName,
-
       profile.lastName,
-
     ]
+      .filter(Boolean)
+      .join(' ');
 
-        .filter(Boolean)
-
-        .join(' ');
-
-
+    const communitiesDialogOpen =
+      state.publicUserCommunityDialogUsername === exactUsername;
 
     return `
-
-    ${flashHtml()}
-    ${state.error ? alertHtml('error', state.error) : ''}
-
-    <section class="public-user-header">
-
-      <div class="public-user-avatar">
-
-        ${escapeHtml(getInitials(profile))}
-
-      </div>
-
-
-
-      <div class="public-user-identity">
-
-        <p class="eyebrow">
-
-          Публичный профиль
-
-        </p>
-
-
-
-        <h1>
-
-          ${escapeHtml(profile.username)}
-
-        </h1>
-
-
-
-        <p>
-
-          ${escapeHtml(
-
-        fullName ||
-
-        'Пользователь Т-Здоровья'
-
-    )}
-
-        </p>
-
-
-
-        <small>
-
-          В Т-Здоровье с
-
-          ${formatDateShort(profile.memberSince)}
-
-        </small>
-
-      </div>
-
-
-
-      <div class="public-user-actions">
-
-        ${
-
-        isCurrentUser
-
-            ? `
-
-              <a
-
-                class="btn"
-
-                href="#/profile"
-
-              >
-
-                Мой профиль
-
-              </a>
-
-            `
-
-            : `
-
-              <button
-
-                class="btn"
-
-                type="button"
-
-                data-start-chat="${escapeHtml(
-
-                profile.userId
-
-            )}"
-
-              >
-
-                Написать
-
-              </button>
-
-            `
-
-    }
-
-      </div>
-
-    </section>
-
-
-
-    <section class="public-user-stats">
-
-      ${publicUserStatCard(
-
-        '🏃',
-
-        'Тренировки',
-
-        workouts.length
-
-    )}
-
-
-
-      ${publicUserStatCard(
-
-        '🍳',
-
-        'Рецепты',
-
-        recipes.length
-
-    )}
-
-
-
-      ${publicUserStatCard(
-
-        '🏅',
-
-        'Достижения',
-
-        achievements.length
-
-    )}
-
-
-
-      ${publicUserStatCard(
-
-        '👥',
-
-        'Сообщества',
-
-        communities.length
-
-    )}
-
-    </section>
-
-
-
-    <section class="public-user-layout">
-
-      <div class="public-user-publications">
-
-        ${publicUserPublicationSection(
-
-        'Тренировки',
-
-        'Опубликованные тренировки пользователя.',
-
-        workouts
-
-    )}
-
-
-
-        ${publicUserPublicationSection(
-
-        'Рецепты',
-
-        'Рецепты из публичной ленты.',
-
-        recipes
-
-    )}
-
-
-
-        ${publicUserPublicationSection(
-
-        'Достижения',
-
-        'Опубликованные достижения.',
-
-        achievements
-
-    )}
-
-
-
-        ${publicUserPublicationSection(
-
-        'Текстовые публикации',
-
-        'Обычные публичные посты.',
-
-        textPosts
-
-    )}
-
-      </div>
-
-
-
-      <aside class="public-user-communities">
-
-        <div class="subsection-heading">
-
-          <div>
-
-            <h2>Сообщества</h2>
-
-
-
-            <p class="muted">
-
-              Сообщества пользователя.
-
-            </p>
-
-          </div>
-
-
-
-          <span class="status-pill">
-
-            ${communities.length}
-
-          </span>
-
+      ${flashHtml()}
+      ${state.error ? alertHtml('error', state.error) : ''}
+
+      <section class="public-user-header">
+        <div class="public-user-avatar" aria-hidden="true">
+          ${escapeHtml(getInitials(profile))}
         </div>
 
+        <div class="public-user-identity">
+          <p class="eyebrow">Публичный профиль</p>
 
+          <h1>${escapeHtml(profile.username)}</h1>
 
-        ${
+          <p class="public-user-full-name">
+            ${escapeHtml(fullName || 'Пользователь Т-Здоровья')}
+          </p>
 
-        communities.length
+          <small>
+            В Т-Здоровье с ${formatDateShort(profile.memberSince)}
+          </small>
+        </div>
 
+        <div class="public-user-actions">
+          <button
+            class="btn"
+            type="button"
+            data-start-chat="${escapeHtml(profile.userId)}"
+          >
+            Написать
+          </button>
+        </div>
+
+        <div class="public-user-stats" aria-label="Публичная статистика пользователя">
+          ${publicUserStatCard('🏃', 'Тренировки', workouts.length)}
+          ${publicUserStatCard('🍳', 'Рецепты', recipes.length)}
+          ${publicUserStatCard('🏅', 'Достижения', achievements.length)}
+          ${publicUserStatCard('👥', 'Сообщества', communities.length)}
+        </div>
+      </section>
+
+      <section class="public-user-layout">
+        <section class="public-user-publications">
+          <div class="public-user-panel-heading">
+            <div>
+              <p class="eyebrow">Активность</p>
+              <h2>Публикации</h2>
+              <p class="muted">
+                Публичные тренировки, рецепты, достижения и текстовые посты.
+              </p>
+            </div>
+
+            <span class="status-pill" aria-label="Количество публикаций">
+              ${publications.length}
+            </span>
+          </div>
+
+          ${publications.length
             ? `
+              <div class="feed-list public-user-feed">
+                ${publications.map(postCard).join('')}
+              </div>
+            `
+            : `
+              <div class="public-user-empty-section">
+                <strong>Публикаций пока нет</strong>
+                <span>Пользователь ещё ничего не публиковал.</span>
+              </div>
+            `}
+        </section>
 
-              <div
-
-                class="public-user-community-list"
-
-              >
-
-                ${communities
-
-                .map(publicUserCommunityCard)
-
-                .join('')}
-
+        <aside class="public-user-sidebar">
+          <section class="public-user-communities">
+            <div class="public-user-panel-heading compact">
+              <div>
+                <p class="eyebrow">Связи</p>
+                <h2>Сообщества</h2>
               </div>
 
-            `
+              <span class="status-pill" aria-label="Количество сообществ">
+                ${communities.length}
+              </span>
+            </div>
 
-            : `
+            ${visibleCommunities.length
+              ? `
+                <div class="public-user-community-list">
+                  ${visibleCommunities.map(publicUserCommunityCard).join('')}
+                </div>
 
-              <p class="muted">
+                ${hiddenCommunitiesCount
+                  ? `
+                    <button
+                      class="btn ghost public-user-show-all-communities"
+                      type="button"
+                      data-open-public-user-communities="${escapeHtml(exactUsername)}"
+                    >
+                      Показать все
+                      <span>${communities.length}</span>
+                    </button>
+                  `
+                  : ''}
+              `
+              : `
+                <p class="muted public-user-community-empty">
+                  Пользователь пока не состоит в сообществах.
+                </p>
+              `}
+          </section>
+        </aside>
+      </section>
 
-                Пользователь пока не состоит
-
-                в сообществах.
-
-              </p>
-
-            `
-
-    }
-
-      </aside>
-
-    </section>
-
-  `;
-
+      ${communitiesDialogOpen
+        ? renderPublicUserCommunitiesDialog(profile, communities)
+        : ''}
+    `;
   }
 
+  function renderPublicUserCommunitiesDialog(profile, communities) {
+    return `
+      <div
+        class="public-user-community-overlay"
+        data-close-public-user-communities
+      >
+        <section
+          class="public-user-community-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="public-user-community-dialog-title"
+          data-public-user-community-dialog
+        >
+          <button
+            class="public-user-community-dialog-close"
+            type="button"
+            data-close-public-user-communities
+            aria-label="Закрыть список сообществ"
+          >×</button>
 
+          <div class="public-user-community-dialog-heading">
+            <div>
+              <p class="eyebrow">Сообщества пользователя</p>
+              <h2 id="public-user-community-dialog-title">
+                ${escapeHtml(profile.username)}
+              </h2>
+            </div>
+
+            <span class="status-pill">${communities.length}</span>
+          </div>
+
+          <div class="public-user-community-dialog-list">
+            ${communities.map(publicUserCommunityCard).join('')}
+          </div>
+        </section>
+      </div>
+    `;
+  }
 
   function normalizedPostType(post) {
 
@@ -4817,209 +4983,40 @@ import './styles.css';
 
 
 
-  function publicUserStatCard(
-
-      icon,
-
-      label,
-
-      count
-
-  ) {
-
+  function publicUserStatCard(icon, label, count) {
     return `
-
-    <article
-
-      class="card public-user-stat-card"
-
-    >
-
-      <span class="badge">
-
-        ${escapeHtml(icon)}
-
-        ${escapeHtml(label)}
-
-      </span>
-
-
-
-      <span class="metric">
-
-        ${Number(count || 0)}
-
-      </span>
-
-    </article>
-
-  `;
-
-  }
-
-
-
-  function publicUserPublicationSection(
-
-      title,
-
-      description,
-
-      posts
-
-  ) {
-
-    return `
-
-    <section class="public-user-section">
-
-      <div class="subsection-heading">
-
-        <div>
-
-          <h2>${escapeHtml(title)}</h2>
-
-
-
-          <p class="muted">
-
-            ${escapeHtml(description)}
-
-          </p>
-
-        </div>
-
-
-
-        <span class="status-pill">
-
-          ${posts.length}
-
+      <div class="public-user-stat-card">
+        <span class="public-user-stat-icon" aria-hidden="true">
+          ${escapeHtml(icon)}
         </span>
 
+        <strong>${Number(count || 0)}</strong>
+        <span>${escapeHtml(label)}</span>
       </div>
-
-
-
-      ${
-
-        posts.length
-
-            ? `
-
-            <div class="feed-list">
-
-              ${posts
-
-                .map(postCard)
-
-                .join('')}
-
-            </div>
-
-          `
-
-            : `
-
-            <p
-
-              class="muted
-
-                     public-user-empty-section"
-
-            >
-
-              Опубликованных материалов
-
-              пока нет.
-
-            </p>
-
-          `
-
-    }
-
-    </section>
-
-  `;
-
+    `;
   }
 
-
-
-  function publicUserCommunityCard(
-
-      community
-
-  ) {
-
+  function publicUserCommunityCard(community) {
     return `
+      <a
+        class="public-user-community-card"
+        href="#/communities/${encodeURIComponent(community.id)}"
+      >
+        <span class="public-user-community-title">
+          ${escapeHtml(community.communityName)}
+        </span>
 
-    <a
+        <span class="public-user-community-description">
+          ${escapeHtml(community.description || 'Без описания')}
+        </span>
 
-      class="public-user-community-card"
-
-      href="#/communities/${encodeURIComponent(
-
-        community.id
-
-    )}"
-
-    >
-
-      <strong>
-
-        ${escapeHtml(
-
-        community.communityName
-
-    )}
-
-      </strong>
-
-
-
-      <span>
-
-        ${escapeHtml(
-
-        community.description ||
-
-        'Без описания'
-
-    )}
-
-      </span>
-
-
-
-      <small>
-
-        ${escapeHtml(
-
-        communityRoleLabel(
-
-            community.role
-
-        )
-
-    )}
-
-        · с ${formatDateShort(
-
-        community.joinedAt
-
-    )}
-
-      </small>
-
-    </a>
-
-  `;
-
+        <small>
+          ${escapeHtml(communityRoleLabel(community.role))}
+          · с ${formatDateShort(community.joinedAt)}
+        </small>
+      </a>
+    `;
   }
-
-
 
   function publicUserLink(username) {
 
@@ -5061,8 +5058,11 @@ import './styles.css';
 
   async function shareAchievement(item) {
     if (!item) {
-      state.achievementShareNotice = 'Достижение не найдено в данных backend.';
-      renderRoute(false);
+      state.achievementShareNotice = null;
+      showTransientNotice(
+        'error',
+        'Достижение не найдено в данных backend.'
+      );
       return;
     }
     const postTitle = prompt('Введите заголовок поста', `Получил достижение: ${achievementTitle(item)}`);
@@ -5079,8 +5079,13 @@ import './styles.css';
       await loadFeed(true);
       renderRoute(false);
     } catch (error) {
-      state.achievementShareNotice = friendlyError(error);
-      renderRoute(false);
+      state.achievementShareNotice = null;
+      state.error = null;
+
+      showTransientNotice(
+        'error',
+        publicationErrorMessage('achievement', error)
+      );
     }
   }
 
