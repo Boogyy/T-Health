@@ -59,6 +59,19 @@ public class PostEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /*
+     * Denormalized counter maintained by a PostgreSQL trigger.
+     * The application reads it together with the post, so feed responses
+     * contain the correct value without loading the comments themselves.
+     */
+    @Column(
+            name = "comments_count",
+            nullable = false,
+            insertable = false,
+            updatable = false
+    )
+    private long commentsCount;
+
     @PrePersist
     private void prePersist() {
         LocalDateTime localDateTime = LocalDateTime.now();
@@ -175,5 +188,9 @@ public class PostEntity {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public long getCommentsCount() {
+        return commentsCount;
     }
 }

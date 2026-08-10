@@ -15,7 +15,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import ru.innopolis.tbank.thealth.dto.request.UpdateUserRequest;
 import ru.innopolis.tbank.thealth.dto.response.ErrorResponse;
+import ru.innopolis.tbank.thealth.dto.response.PublicUserProfileResponse;
 import ru.innopolis.tbank.thealth.dto.response.UserResponse;
+import ru.innopolis.tbank.thealth.services.PublicUserService;
 import ru.innopolis.tbank.thealth.services.UserService;
 
 import java.util.UUID;
@@ -30,9 +32,14 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final PublicUserService publicUserService;
 
-    public UserController(UserService userService) {
+    public UserController(
+            UserService userService,
+            PublicUserService publicUserService
+    ) {
         this.userService = userService;
+        this.publicUserService = publicUserService;
     }
 
 
@@ -120,4 +127,46 @@ public class UserController {
         userService.deleteUser(jwt);
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(
+            summary = "Получить публичный профиль пользователя",
+            description = """
+                Возвращает публичные публикации и сообщества
+                пользователя без email и личных данных.
+                """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Публичный профиль получен"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Пользователь не авторизован",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Пользователь не найден",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            )
+    })
+    @GetMapping("/public/{username}")
+    public ResponseEntity<PublicUserProfileResponse>
+    getPublicProfile(
+            @PathVariable("username") String username
+    ) {
+        return ResponseEntity.ok(
+                publicUserService.getPublicProfile(username)
+        );
+    }
+
 }

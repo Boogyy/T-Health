@@ -1,5 +1,6 @@
 package ru.innopolis.tbank.thealth.repositories;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import ru.innopolis.tbank.thealth.entities.CommunityMemberEntity;
 
@@ -11,6 +12,7 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
 
     List<CommunityMemberEntity> findAllByCommunity_IdOrderByJoinedAtDesc(UUID communityId);
 
+    @EntityGraph(attributePaths = "community")
     List<CommunityMemberEntity> findAllByUser_KeycloakIdOrderByJoinedAtDesc(UUID userId);
 
     Optional<CommunityMemberEntity> findByCommunity_IdAndUser_KeycloakId(UUID communityId, UUID userId);

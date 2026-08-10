@@ -46,6 +46,9 @@ public record PostResponse(
         @Schema(description = "Данные текстового поста", example = "Всем привет, посоветуйте упражнения для кора")
         String content,
 
+        @Schema(description = "Количество комментариев к посту", example = "7")
+        long commentsCount,
+
         @Schema(description = "Дата создания поста")
         LocalDateTime createdAt,
 
