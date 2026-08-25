@@ -235,6 +235,7 @@ class PublicUserServiceTest {
                 null,
                 PostType.TEXT,
                 "Текст публичной публикации",
+                0L,
                 POST_CREATED_AT,
                 POST_CREATED_AT
         );
