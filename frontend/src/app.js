@@ -90,11 +90,17 @@ import './public-profile.css';
 
   const app = document.getElementById('app');
   let transientNoticeTimer = null;
+  let chatPollingTimer = null;
+  let chatPollInFlight = false;
+
+  const CHAT_POLL_INTERVAL_MS = 1500;
 
   window.addEventListener('hashchange', renderRoute);
   window.addEventListener('DOMContentLoaded', init);
 
   async function init() {
+    startChatPolling();
+
     const query = new URLSearchParams(window.location.search);
     if (query.has('error')) {
       const reason = query.get('error_description') || query.get('error') || 'Keycloak вернул ошибку авторизации.';
@@ -689,6 +695,95 @@ import './public-profile.css';
     }
   }
 
+  function startChatPolling() {
+    if (chatPollingTimer) return;
+
+    chatPollingTimer = window.setInterval(
+      pollOpenChatMessages,
+      CHAT_POLL_INTERVAL_MS
+    );
+  }
+
+  async function pollOpenChatMessages() {
+    if (chatPollInFlight || !isAuthenticated()) return;
+
+    const parts = routeParts();
+
+    if (
+      parts[0] !== 'chats' ||
+      !parts[1] ||
+      parts[1] === 'new'
+    ) {
+      return;
+    }
+
+    const chatId = String(parts[1]);
+
+    // Первый запрос по-прежнему выполняет loadChatMessages().
+    // Polling включается только после того, как чат уже открыт.
+    if (!state.chatMessages[chatId]) return;
+
+    try {
+      chatPollInFlight = true;
+
+      const messages = await apiFetch(
+        `/api/direct-chats/${encodeURIComponent(chatId)}/messages`
+      );
+
+      const nextMessages = sortByDateAscending(
+        Array.isArray(messages) ? messages : [],
+        'sentAt'
+      );
+
+      const currentMessages = state.chatMessages[chatId] || [];
+      const currentLast = currentMessages[currentMessages.length - 1];
+      const nextLast = nextMessages[nextMessages.length - 1];
+
+      const changed =
+        currentMessages.length !== nextMessages.length ||
+        String(currentLast?.id || '') !== String(nextLast?.id || '');
+
+      if (!changed) return;
+
+      const messagesContainer = app.querySelector('[data-messages]');
+      const nearBottom = messagesContainer
+        ? messagesContainer.scrollHeight -
+            messagesContainer.scrollTop -
+            messagesContainer.clientHeight <
+          140
+        : true;
+
+      state.chatMessages[chatId] = nextMessages;
+
+      if (nextLast) {
+        updateChatLastMessage(chatId, nextLast);
+      }
+
+      // Не перерисовываем всю страницу, чтобы не сбрасывать текст,
+      // который пользователь уже набрал в textarea.
+      if (messagesContainer) {
+        messagesContainer.innerHTML = nextMessages.length
+          ? nextMessages.map(messageBubble).join('')
+          : `
+              <div class="chat-empty">
+                <strong>Сообщений пока нет</strong>
+                <span>Поздоровайтесь с собеседником.</span>
+              </div>
+            `;
+
+        if (nearBottom) {
+          scrollChatToBottom();
+        }
+      }
+    } catch (error) {
+      // Polling не должен ломать открытую переписку при временной
+      // сетевой ошибке. Ручная кнопка «Обновить» остаётся fallback'ом.
+      console.warn('Не удалось обновить сообщения чата:', error);
+    } finally {
+      chatPollInFlight = false;
+    }
+  }
+
   function clearAuthData() {
     localStorage.removeItem(STORAGE.token);
     localStorage.removeItem(STORAGE.pkce);
@@ -1143,6 +1238,11 @@ import './public-profile.css';
             <div class="meta-item"><span class="meta-label">Имя</span><strong>${escapeHtml(user.firstName || '—')}</strong></div>
             <div class="meta-item"><span class="meta-label">Фамилия</span><strong>${escapeHtml(user.lastName || '—')}</strong></div>
             <div class="meta-item"><span class="meta-label">ID</span><strong>${escapeHtml(shortId(user.id))}</strong></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn danger full" type="button" data-delete-profile>
+              Удалить профиль
+            </button>
           </div>
         </aside>
         <div class="cards-grid profile-grid profile-cards-readable">
@@ -1950,8 +2050,8 @@ import './public-profile.css';
             </h1>
 
             ${post.content ? `<p class="post-content">${escapeHtml(post.content)}</p>` : ''}
-            ${post.workout ? postWorkoutPayload(post.workout) : ''}
-            ${post.recipe ? postRecipePayload(post.recipe) : ''}
+            ${post.workout ? postWorkoutPayload(post.workout, true) : ''}
+            ${post.recipe ? postRecipePayload(post.recipe, true) : ''}
             ${post.userAchievement ? postAchievementPayload(post.userAchievement) : ''}
           </article>
 
@@ -2055,12 +2155,95 @@ import './public-profile.css';
     }
   }
 
-  function postWorkoutPayload(workout) {
-    return `<div class="payload-card"><strong>${escapeHtml(workout.title || 'Тренировка')}</strong><span>${workoutTypeLabel(workout.type)} · ${workout.durationMinutes || 0} мин · ${workout.caloriesBurned || 0} ккал</span></div>`;
+  function postWorkoutPayload(workout, detailed = false) {
+    const title = escapeHtml(workout.title || 'Тренировка');
+    const meta = `${workoutTypeLabel(workout.type)} · ${workout.durationMinutes || 0} мин · ${workout.caloriesBurned || 0} ккал`;
+
+    if (!detailed) {
+      return `<div class="payload-card"><strong>${title}</strong><span>${meta}</span></div>`;
+    }
+
+    return `
+      <div class="payload-card linked-entity-card">
+        <div class="linked-entity-heading">
+          <strong>${title}</strong>
+          <span>${meta}</span>
+        </div>
+
+        <div class="linked-entity-stats">
+          <div>
+            <strong>Тип</strong>
+            <span>${workoutTypeLabel(workout.type)}</span>
+          </div>
+          <div>
+            <strong>Длительность</strong>
+            <span>${workout.durationMinutes || 0} минут</span>
+          </div>
+          <div>
+            <strong>Калории</strong>
+            <span>${workout.caloriesBurned ?? 0} ккал</span>
+          </div>
+          <div>
+            <strong>Дата</strong>
+            <span>${formatDateTime(workout.workoutDate)}</span>
+          </div>
+        </div>
+
+        <div class="linked-entity-section">
+          <strong>Описание тренировки</strong>
+          <p>${escapeHtml(workout.description || 'Описание не добавлено')}</p>
+        </div>
+      </div>
+    `;
   }
 
-  function postRecipePayload(recipe) {
-    return `<div class="payload-card"><strong>${escapeHtml(recipe.title || 'Рецепт')}</strong><span>К=${recipe.calories || 0}, Б=${formatNumber(recipe.proteins)}, Ж=${formatNumber(recipe.fats)}, У=${formatNumber(recipe.carbohydrates)}</span></div>`;
+  function postRecipePayload(recipe, detailed = false) {
+    const title = escapeHtml(recipe.title || 'Рецепт');
+    const meta = `К=${recipe.calories || 0}, Б=${formatNumber(recipe.proteins)}, Ж=${formatNumber(recipe.fats)}, У=${formatNumber(recipe.carbohydrates)}`;
+
+    if (!detailed) {
+      return `<div class="payload-card"><strong>${title}</strong><span>${meta}</span></div>`;
+    }
+
+    return `
+      <div class="payload-card linked-entity-card linked-recipe-card">
+        <div class="linked-entity-heading">
+          <strong>${title}</strong>
+          <span>${meta}</span>
+        </div>
+
+        ${recipe.imageUrl ? `
+          <img
+            class="linked-recipe-image"
+            src="${escapeHtml(recipe.imageUrl)}"
+            alt="${title}"
+            loading="lazy"
+          />
+        ` : ''}
+
+        <div class="linked-entity-section">
+          <strong>Описание</strong>
+          <p>${escapeHtml(recipe.description || 'Описание не добавлено')}</p>
+        </div>
+
+        <div class="linked-entity-section">
+          <strong>Ингредиенты</strong>
+          <p>${escapeHtml(recipe.ingredients || 'Ингредиенты не указаны')}</p>
+        </div>
+
+        <div class="linked-entity-section linked-recipe-steps">
+          <strong>Шаги приготовления</strong>
+          <p>${escapeHtml(recipe.cookingSteps || 'Шаги приготовления не указаны')}</p>
+        </div>
+
+        <div class="linked-entity-stats linked-recipe-macros">
+          <div><strong>Калории</strong><span>${recipe.calories || 0} ккал</span></div>
+          <div><strong>Белки</strong><span>${formatNumber(recipe.proteins)} г</span></div>
+          <div><strong>Жиры</strong><span>${formatNumber(recipe.fats)} г</span></div>
+          <div><strong>Углеводы</strong><span>${formatNumber(recipe.carbohydrates)} г</span></div>
+        </div>
+      </div>
+    `;
   }
 
   function postAchievementPayload(item) {
@@ -3597,6 +3780,30 @@ import './public-profile.css';
   function bindGlobalActions() {
     app.querySelectorAll('[data-auth]').forEach((button) => button.addEventListener('click', () => startAuth(button.dataset.auth)));
     app.querySelectorAll('[data-logout]').forEach((button) => button.addEventListener('click', logout));
+    app.querySelectorAll('[data-delete-profile]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const confirmed = window.confirm(
+          'Удалить профиль без возможности восстановления?\n\n' +
+          'Будут удалены ваши тренировки, записи питания, рецепты, достижения, ' +
+          'публикации, комментарии, сообщества и личные чаты.'
+        );
+
+        if (!confirmed) return;
+
+        button.disabled = true;
+        state.error = null;
+
+        try {
+          await apiFetch('/api/users/me', { method: 'DELETE' });
+          clearAuthData();
+          navigate('/login');
+        } catch (error) {
+          button.disabled = false;
+          state.error = friendlyError(error);
+          renderRoute(false);
+        }
+      });
+    });
     app.querySelectorAll('[data-reload]').forEach((button) => button.addEventListener('click', () => reloadCurrentSection()));
     app.querySelectorAll('[data-dismiss-transient-notice]').forEach((button) => {
       button.addEventListener('click', dismissTransientNotice);
@@ -3678,8 +3885,20 @@ import './public-profile.css';
 
     app.querySelectorAll('[data-delete-workout]').forEach((button) => {
       button.addEventListener('click', async () => {
-        if (!confirm('Удалить эту тренировку?')) return;
-        await deleteResource('/api/workouts/' + encodeURIComponent(button.dataset.deleteWorkout), 'Тренировка удалена.');
+        if (
+          !confirm(
+            'Удалить эту тренировку? Если она опубликована, связанный пост и его комментарии также будут удалены.'
+          )
+        ) {
+          return;
+        }
+
+        await deleteResource(
+          '/api/workouts/' +
+            encodeURIComponent(button.dataset.deleteWorkout) +
+            '?deleteRelatedPost=true',
+          'Тренировка и связанный пост удалены.'
+        );
       });
     });
 
@@ -3692,8 +3911,20 @@ import './public-profile.css';
 
     app.querySelectorAll('[data-delete-recipe]').forEach((button) => {
       button.addEventListener('click', async () => {
-        if (!confirm('Удалить этот рецепт?')) return;
-        await deleteResource('/api/recipes/' + encodeURIComponent(button.dataset.deleteRecipe), 'Рецепт удален.');
+        if (
+          !confirm(
+            'Удалить этот рецепт? Если он опубликован, связанный пост и его комментарии также будут удалены.'
+          )
+        ) {
+          return;
+        }
+
+        await deleteResource(
+          '/api/recipes/' +
+            encodeURIComponent(button.dataset.deleteRecipe) +
+            '?deleteRelatedPost=true',
+          'Рецепт и связанный пост удалены.'
+        );
       });
     });
 
@@ -4291,7 +4522,9 @@ import './public-profile.css';
 
   async function deleteResource(path, message) {
     try {
+      state.error = null;
       await apiFetch(path, { method: 'DELETE' });
+      state.error = null;
       state.flash = message;
       await loadDashboard(true);
       navigate('/profile');

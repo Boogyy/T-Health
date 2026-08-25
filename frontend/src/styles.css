@@ -1101,6 +1101,68 @@ select:focus {
   color: var(--graphite-2);
 }
 
+.linked-entity-card {
+  gap: 16px;
+  padding: 18px;
+}
+
+.linked-entity-heading {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--neutral-2);
+}
+
+.linked-entity-heading > span {
+  color: var(--graphite-2);
+}
+
+.linked-entity-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.linked-entity-stats > div,
+.linked-entity-section {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.linked-entity-stats strong,
+.linked-entity-section strong {
+  font-size: 13px;
+}
+
+.linked-entity-section p {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.linked-recipe-image {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid var(--neutral-2);
+  background: var(--neutral-1);
+}
+
+.linked-recipe-steps p {
+  white-space: pre-line;
+}
+
+@media (max-width: 620px) {
+  .linked-entity-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 940px) {
   .profile-grid,
   .nutrition-summary {
